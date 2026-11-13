@@ -1,0 +1,21 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_Referencias_No_Duplicadas</fullName>
+    <active>true</active>
+    <description>Impide que Referencia 1 y Referencia 2 compartan el mismo RNC/documento o teléfono.</description>
+    <errorConditionFormula>OR(
+    AND(
+        NOT(ISBLANK(LEA_RNC_Referencia1__c)),
+        NOT(ISBLANK(LEA_RNC_Referencia2__c)),
+        SUBSTITUTE(SUBSTITUTE(TRIM(LEA_RNC_Referencia1__c), &quot; &quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;) =
+        SUBSTITUTE(SUBSTITUTE(TRIM(LEA_RNC_Referencia2__c), &quot; &quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;)
+    ),
+    AND(
+        NOT(ISBLANK(LEA_Telefono_Referencia1__c)),
+        NOT(ISBLANK(LEA_Telefono_Referencia2__c)),
+        SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(TRIM(LEA_Telefono_Referencia1__c), &quot; &quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;), &quot;(&quot;, &quot;&quot;), &quot;)&quot;, &quot;&quot;), &quot;+&quot;, &quot;&quot;) =
+        SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(SUBSTITUTE(TRIM(LEA_Telefono_Referencia2__c), &quot; &quot;, &quot;&quot;), &quot;-&quot;, &quot;&quot;), &quot;(&quot;, &quot;&quot;), &quot;)&quot;, &quot;&quot;), &quot;+&quot;, &quot;&quot;)
+    )
+)</errorConditionFormula>
+    <errorMessage>El RNC/documento o el teléfono de la Referencia 2 ya está utilizado en la Referencia 1.</errorMessage>
+</ValidationRule>
