@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ApprovalProcess xmlns="http://soap.sforce.com/2006/04/metadata">
+    <active>true</active>
+    <allowRecall>false</allowRecall>
+    <allowedSubmitters>
+        <submitter>GERENTE_DE_PREVENCION_LAVADO_DE_ACTIVOS</submitter>
+        <type>roleSubordinatesInternal</type>
+    </allowedSubmitters>
+    <approvalPageFields>
+        <field>Name</field>
+        <field>Owner</field>
+    </approvalPageFields>
+    <approvalStep>
+        <allowDelegate>false</allowDelegate>
+        <approvalActions>
+            <action>
+                <name>Update_AprobadoPLA</name>
+                <type>FieldUpdate</type>
+            </action>
+            <action>
+                <name>Update_Estado_Validado</name>
+                <type>FieldUpdate</type>
+            </action>
+            <action>
+                <name>Update_subEstado_PEP</name>
+                <type>FieldUpdate</type>
+            </action>
+        </approvalActions>
+        <assignedApprover>
+            <approver>
+                <name>OTCP_PLAUser__c</name>
+                <type>relatedUserField</type>
+            </approver>
+            <whenMultipleApprovers>FirstResponse</whenMultipleApprovers>
+        </assignedApprover>
+        <label>Aprobación de Solicitud TC - Pesona es PEP</label>
+        <name>Aprobacion_de_Solicitud_TC_Pesona_es_PEP</name>
+        <rejectionActions>
+            <action>
+                <name>Update_Estado_Perdida</name>
+                <type>FieldUpdate</type>
+            </action>
+            <action>
+                <name>Update_subestado_RechazadaPLA</name>
+                <type>FieldUpdate</type>
+            </action>
+        </rejectionActions>
+    </approvalStep>
+    <enableMobileDeviceAccess>false</enableMobileDeviceAccess>
+    <entryCriteria>
+        <criteriaItems>
+            <field>OpportunityTCP__c.RecordType</field>
+            <operation>equals</operation>
+            <value>Solicitud TC Preembosada</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>OpportunityTCP__c.OTCP_State__c</field>
+            <operation>equals</operation>
+            <value>En Validacion</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>OpportunityTCP__c.OTCP_SubState__c</field>
+            <operation>equals</operation>
+            <value>Pendiente Aprobacion PLA</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>OpportunityTCP__c.OTCP_IsPEP__c</field>
+            <operation>equals</operation>
+            <value>Verdadero</value>
+        </criteriaItems>
+    </entryCriteria>
+    <finalApprovalRecordLock>false</finalApprovalRecordLock>
+    <finalRejectionRecordLock>false</finalRejectionRecordLock>
+    <label>Aprobación PLA - PEP</label>
+    <processOrder>3</processOrder>
+    <recordEditability>AdminOnly</recordEditability>
+    <showApprovalHistory>true</showApprovalHistory>
+</ApprovalProcess>
