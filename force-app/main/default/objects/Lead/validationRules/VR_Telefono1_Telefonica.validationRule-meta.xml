@@ -1,0 +1,23 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_Telefono1_Telefonica</fullName>
+    <active>true</active>
+    <description>Validación que exige informar la compañía telefónica si la vía de contacto 1 es un teléfono.</description>
+    <errorConditionFormula>AND(
+    $Label.Validaciones = &apos;Si&apos;,
+    ISCHANGED(IsConverted),
+    IsConverted = TRUE,
+    OR(
+        ISPICKVAL(LEA_Via_de_Contacto1__c, &apos;TELÉFONO FIJO&apos;),
+        ISPICKVAL(LEA_Via_de_Contacto1__c, &apos;TELÉFONO MÓVIL&apos;),
+        ISPICKVAL(LEA_Via_de_Contacto1__c, &apos;TELÉFONO FAX&apos;),
+        ISPICKVAL(LEA_Via_de_Contacto1__c, &apos;TELÉFONO TRABAJO&apos;),
+        ISPICKVAL(LEA_Via_de_Contacto1__c, &apos;TELÉFONO EN EL EXTERIOR&apos;),
+        ISPICKVAL(LEA_Via_de_Contacto1__c, &apos;MÓVIL EN EL EXTERIOR&apos;)
+    ),
+    NOT(ISBLANK(LEA_Numero_Correo1__c)),
+    ISBLANK(TEXT(LEA_Telefonica1__c))
+)</errorConditionFormula>
+    <errorDisplayField>LEA_Telefonica1__c</errorDisplayField>
+    <errorMessage>Debe contener la información de Telefónica 1 antes de convertir cuando la vía de contacto 1 es un teléfono.</errorMessage>
+</ValidationRule>

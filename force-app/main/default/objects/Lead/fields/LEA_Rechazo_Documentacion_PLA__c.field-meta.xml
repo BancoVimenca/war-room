@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LEA_Rechazo_Documentacion_PLA__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Marca el rechazo automático por vencimiento de la entrega PLA para impedir que una aprobación pendiente reactive el onboarding.</description>
+    <label>Rechazado por plazo de entrega PLA</label>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Checkbox</type>
+</CustomField>

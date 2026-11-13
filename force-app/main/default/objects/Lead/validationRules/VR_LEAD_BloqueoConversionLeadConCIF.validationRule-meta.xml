@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_LEAD_BloqueoConversionLeadConCIF</fullName>
+    <active>true</active>
+    <description>Bloquea la conversión de Leads migrados que poseen CIF previo, requiriendo validación por el área de Tecnología.</description>
+    <errorConditionFormula>AND(
+    IsConverted = TRUE,
+    NOT(ISBLANK(LEA_CIF__c)),
+    $Profile.Name &lt;&gt; &apos;System Administrator&apos;,
+    $Profile.Name &lt;&gt; &apos;Administrador del sistema&apos;
+)</errorConditionFormula>
+    <errorMessage>Este candidato posee un CIF previo migrado ({!LEA_CIF__c}). Debe comunicarse con el área de Tecnología para validar y autorizar su conversión.</errorMessage>
+</ValidationRule>

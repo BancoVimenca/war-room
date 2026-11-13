@@ -1,0 +1,97 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ApprovalProcess xmlns="http://soap.sforce.com/2006/04/metadata">
+    <active>true</active>
+    <allowRecall>false</allowRecall>
+    <allowedSubmitters>
+        <type>allInternalUsers</type>
+    </allowedSubmitters>
+    <approvalPageFields>
+        <field>CaseNumber</field>
+        <field>Subject</field>
+        <field>Status</field>
+        <field>CAS_Modelo__c</field>
+        <field>Owner</field>
+    </approvalPageFields>
+    <approvalStep>
+        <allowDelegate>false</allowDelegate>
+        <approvalActions>
+            <action>
+                <name>CAS_TI_Pasar_Aprobacion_Comercial</name>
+                <type>FieldUpdate</type>
+            </action>
+        </approvalActions>
+        <assignedApprover>
+            <approver>
+                <name>jperoza@keystoneadvisors.cl.prd</name>
+                <type>user</type>
+            </approver>
+            <approver>
+                <name>lrodriguez@bv.com.do</name>
+                <type>user</type>
+            </approver>
+            <whenMultipleApprovers>FirstResponse</whenMultipleApprovers>
+        </assignedApprover>
+        <description>Configurar un usuario fijo como aprobador técnico antes de activar el proceso.</description>
+        <label>Aprobación Técnica</label>
+        <name>Aprobacion_Tecnica</name>
+    </approvalStep>
+    <approvalStep>
+        <allowDelegate>false</allowDelegate>
+        <assignedApprover>
+            <approver>
+                <name>jperoza@keystoneadvisors.cl.prd</name>
+                <type>user</type>
+            </approver>
+            <whenMultipleApprovers>FirstResponse</whenMultipleApprovers>
+        </assignedApprover>
+        <description>Configurar un usuario fijo como aprobador comercial antes de activar el proceso.</description>
+        <label>Aprobación Comercial</label>
+        <name>Aprobacion_Comercial</name>
+        <rejectBehavior>
+            <type>RejectRequest</type>
+        </rejectBehavior>
+    </approvalStep>
+    <description>Aprobación técnica y comercial de casos Soporte_TI con modelo Keystone IT Flex. La aprobación comercial finaliza el resultado, sin cambiar automáticamente el estado operativo a En proceso.</description>
+    <enableMobileDeviceAccess>false</enableMobileDeviceAccess>
+    <entryCriteria>
+        <criteriaItems>
+            <field>Case.RecordType</field>
+            <operation>equals</operation>
+            <value>Soporte TI</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>Case.Status</field>
+            <operation>equals</operation>
+            <value>Aprobación Técnica</value>
+        </criteriaItems>
+        <criteriaItems>
+            <field>Case.CAS_Modelo__c</field>
+            <operation>equals</operation>
+            <value>Keystone IT Flex</value>
+        </criteriaItems>
+    </entryCriteria>
+    <finalApprovalActions>
+        <action>
+            <name>CAS_TI_Aprobado</name>
+            <type>FieldUpdate</type>
+        </action>
+    </finalApprovalActions>
+    <finalApprovalRecordLock>false</finalApprovalRecordLock>
+    <finalRejectionActions>
+        <action>
+            <name>CAS_TI_Rechazado</name>
+            <type>FieldUpdate</type>
+        </action>
+    </finalRejectionActions>
+    <finalRejectionRecordLock>false</finalRejectionRecordLock>
+    <initialSubmissionActions>
+        <action>
+            <name>CAS_TI_Aprobacion_Pendiente</name>
+            <type>FieldUpdate</type>
+        </action>
+    </initialSubmissionActions>
+    <label>Aprobación de Casos en Soporte TI</label>
+    <processOrder>1</processOrder>
+    <recordEditability>AdminOnly</recordEditability>
+    <showApprovalHistory>true</showApprovalHistory>
+</ApprovalProcess>
