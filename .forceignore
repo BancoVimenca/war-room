@@ -1,0 +1,5 @@
+# Salesforce DX ignore file
+.sf/
+.sfdx/
+.localdevserver/
+node_modules/
