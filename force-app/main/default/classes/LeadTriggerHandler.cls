@@ -295,25 +295,71 @@ public with sharing class LeadTriggerHandler {
         try {
             Set<Id> leadIdsToSubmit = new Set<Id>();
 
-            for (Lead newLead : newList) {
-                if (newLead == null || newLead.Id == null) {
+            // [BVWAR-264 / SOL-0249] Re-consultar campos de Lead requeridos para evitar SObjectException si newList viene de un SOQL parcial en tests/flows
+            Set<Id> leadIdsInScope = new Set<Id>();
+            for (Lead l : newList) {
+                if (l != null && l.Id != null) {
+                    leadIdsInScope.add(l.Id);
+                }
+            }
+
+            Map<Id, Lead> freshLeads = new Map<Id, Lead>([
+                SELECT Id, RecordTypeId, RecordType.DeveloperName, LEA_TipoIdentificacion__c,
+                       LEA_Coincidencia_Listas_Internas__c, LEA_Coincidencia_Listas_Externas__c, LEA_Listas__c,
+                       LEA_Estado_Aprobacion_Tecnologia__c, LEA_Doc_Legal_No_Aprobada__c
+                FROM Lead
+                WHERE Id IN :leadIdsInScope
+            ]);
+
+            Set<Id> leadIdsPFAlertPLA = new Set<Id>();
+            Set<Id> leadIdsPFAlertTecnologia = new Set<Id>();
+
+            for (Lead candidateLead : newList) {
+                if (candidateLead == null || candidateLead.Id == null) {
                     continue;
                 }
 
-                Boolean tieneDocsNoAprobados =
-                    newLead.LEA_Doc_Legal_No_Aprobada__c != null &&
-                    newLead.LEA_Doc_Legal_No_Aprobada__c > 0;
+                Lead newLead = freshLeads.containsKey(candidateLead.Id) ? freshLeads.get(candidateLead.Id) : candidateLead;
 
-                System.debug(
-                    'LeadTriggerHandler.submitPLAApprovalIfNeeded() Lead evaluado. Id=' + newLead.Id +
-                    ', newStatus=' + newLead.Status +
-                    ', LEA_Doc_Legal_No_Aprobada__c=' + newLead.LEA_Doc_Legal_No_Aprobada__c +
-                    ', tieneDocsNoAprobados=' + tieneDocsNoAprobados
-                );
+                String rtDevName = newLead.RecordType != null ? newLead.RecordType.DeveloperName : '';
+                Boolean isPersonaFisica = (rtDevName == 'Candidato_Persona_Natural' || rtDevName == 'Candidato_Persona_Fisica');
 
-                if (tieneDocsNoAprobados) {
-                    leadIdsToSubmit.add(newLead.Id);
+                if (isPersonaFisica) {
+                    // Regla BVWAR-264: Persona Física solo va a PLA si hay alerta por listas restrictivas
+                    Boolean tieneAlertaListas = (newLead.LEA_Coincidencia_Listas_Internas__c == true ||
+                                                newLead.LEA_Coincidencia_Listas_Externas__c == true ||
+                                                String.isNotBlank(newLead.LEA_Listas__c));
+                    if (tieneAlertaListas) {
+                        leadIdsPFAlertPLA.add(newLead.Id);
+                    }
+
+                    // Regla BVWAR-264: Persona Física con Cédula solo va a Tecnología si hay alerta por Padrón Electoral
+                    String tipoIdent = String.isNotBlank(newLead.LEA_TipoIdentificacion__c) ? newLead.LEA_TipoIdentificacion__c.trim() : '';
+                    Boolean esCedula = (tipoIdent.equalsIgnoreCase('Cedula') || tipoIdent.equalsIgnoreCase('Cédula'));
+                    Boolean alertaPadronTec = (newLead.LEA_Estado_Aprobacion_Tecnologia__c == 'Pendiente');
+                    if (esCedula && alertaPadronTec) {
+                        leadIdsPFAlertTecnologia.add(newLead.Id);
+                    }
+                } else {
+                    // Persona Jurídica o flujo estándar de documentación
+                    Boolean tieneDocsNoAprobados =
+                        newLead.LEA_Doc_Legal_No_Aprobada__c != null &&
+                        newLead.LEA_Doc_Legal_No_Aprobada__c > 0;
+
+                    if (tieneDocsNoAprobados) {
+                        leadIdsToSubmit.add(newLead.Id);
+                    }
                 }
+            }
+
+            // Encolar aprobaciones de tecnología para Persona Física con alerta de padrón
+            if (!leadIdsPFAlertTecnologia.isEmpty()) {
+                System.enqueueJob(new TechnologyApprovalQueueable(leadIdsPFAlertTecnologia));
+            }
+
+            // Encolar aprobaciones PLA para Persona Física con alerta de listas
+            if (!leadIdsPFAlertPLA.isEmpty()) {
+                System.enqueueJob(new PLAApprovalQueueable(leadIdsPFAlertPLA));
             }
 
             // El archivo se carga inicialmente contra el Lead y luego se mueve al
@@ -381,6 +427,50 @@ public with sharing class LeadTriggerHandler {
             System.debug('ERROR LeadTriggerHandler.submitPLAApprovalIfNeeded: ' + e.getMessage());
             System.debug(e.getStackTraceString());
             throw e;
+        }
+    }
+
+    private class TechnologyApprovalQueueable implements Queueable {
+        private Set<Id> leadIds;
+        public TechnologyApprovalQueueable(Set<Id> candidateIds) {
+            this.leadIds = candidateIds == null ? new Set<Id>() : new Set<Id>(candidateIds);
+        }
+        public void execute(QueueableContext context) {
+            if (leadIds.isEmpty()) return;
+            for (Id leadId : leadIds) {
+                try {
+                    Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
+                    req.setObjectId(leadId);
+                    req.setProcessDefinitionNameOrId('PA_Aprobacion_Tecnologia_LEAD');
+                    req.setSubmitterId(UserInfo.getUserId());
+                    req.setComments('Enviado a revisión de Tecnología por alerta/rechazo de validación en Padrón Electoral.');
+                    Approval.process(req);
+                } catch (Exception ex) {
+                    System.debug(LoggingLevel.WARN, 'Aprobación Tecnología ya pendiente o error: ' + ex.getMessage());
+                }
+            }
+        }
+    }
+
+    private class PLAApprovalQueueable implements Queueable {
+        private Set<Id> leadIds;
+        public PLAApprovalQueueable(Set<Id> candidateIds) {
+            this.leadIds = candidateIds == null ? new Set<Id>() : new Set<Id>(candidateIds);
+        }
+        public void execute(QueueableContext context) {
+            if (leadIds.isEmpty()) return;
+            for (Id leadId : leadIds) {
+                try {
+                    Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
+                    req.setObjectId(leadId);
+                    req.setProcessDefinitionNameOrId('Aprobacion_de_Candidatos_por_Legal');
+                    req.setSubmitterId(UserInfo.getUserId());
+                    req.setComments('Enviado a revisión PLA por coincidencia de alerta en listas restrictivas.');
+                    Approval.process(req);
+                } catch (Exception ex) {
+                    System.debug(LoggingLevel.WARN, 'Aprobación PLA ya pendiente o error: ' + ex.getMessage());
+                }
+            }
         }
     }
 

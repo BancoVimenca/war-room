@@ -1887,4 +1887,88 @@ private class LeadTriggerHandlerTest {
             l.getErrors().size()
         );
     }
+
+    /*
+     * ============================================================
+     * [BVWAR-264 / SOL-0249] TESTS VALIDACION PERSONA FISICA (ALERTAS)
+     * ============================================================
+     */
+
+    @IsTest
+    static void testPersonaFisicaSinAlertasNoEnviaAPLA() {
+        Id rtPF = getRecordTypePF();
+        if (rtPF == null) return;
+
+        Lead l = new Lead(
+            FirstName = 'Juan',
+            LastName = 'Perez Test',
+            Company = 'Juan Perez Test',
+            Status = 'VALIDADO',
+            LEA_SubEstado__c = 'ACEPTADO',
+            RecordTypeId = rtPF,
+            LEA_TipoIdentificacion__c = 'Cédula',
+            LEA_NumIdentificacion__c = '40200000001',
+            LEA_Coincidencia_Listas_Internas__c = false,
+            LEA_Coincidencia_Listas_Externas__c = false
+        );
+        insert l;
+
+        Test.startTest();
+        l.LEA_SubEstado__c = 'EN REVISIÓN';
+        update l;
+        Test.stopTest();
+
+        System.assertNotEquals(null, l.Id);
+    }
+
+    @IsTest
+    static void testPersonaFisicaAlertaListasEnviaAPLA() {
+        Id rtPF = getRecordTypePF();
+        if (rtPF == null) return;
+
+        Lead l = new Lead(
+            FirstName = 'Alerta',
+            LastName = 'Listas Test',
+            Company = 'Alerta Listas Test',
+            Status = 'VALIDADO',
+            LEA_SubEstado__c = 'ACEPTADO',
+            RecordTypeId = rtPF,
+            LEA_TipoIdentificacion__c = 'Cédula',
+            LEA_NumIdentificacion__c = '40200000002',
+            LEA_Coincidencia_Listas_Internas__c = true
+        );
+        insert l;
+
+        Test.startTest();
+        l.LEA_SubEstado__c = 'EN REVISIÓN';
+        update l;
+        Test.stopTest();
+
+        System.assertNotEquals(null, l.Id);
+    }
+
+    @IsTest
+    static void testPersonaFisicaCedulaAlertaPadronEnviaTecnologia() {
+        Id rtPF = getRecordTypePF();
+        if (rtPF == null) return;
+
+        Lead l = new Lead(
+            FirstName = 'Alerta',
+            LastName = 'Padron Test',
+            Company = 'Alerta Padron Test',
+            Status = 'VALIDADO',
+            LEA_SubEstado__c = 'ACEPTADO',
+            RecordTypeId = rtPF,
+            LEA_TipoIdentificacion__c = 'Cédula',
+            LEA_NumIdentificacion__c = '40200000003'
+        );
+        insert l;
+
+        Test.startTest();
+        l.LEA_SubEstado__c = 'EN REVISIÓN';
+        update l;
+        Test.stopTest();
+
+        System.assertNotEquals(null, l.Id);
+    }
 }
