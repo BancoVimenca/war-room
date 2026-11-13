@@ -1,0 +1,254 @@
+/**
+ * @description       : Batch de Auditoría de Campos Obligatorios y Gestión de Notificaciones (Componente 1)
+ *                      - Para clientes con ejecutivo: Despacha correo individual con viñetas de faltantes y link directo.
+ *                      - Para clientes en los 10 usuarios de sucursales: Agrupa casos y envía un CSV/HTML consolidado
+ *                        al Encargado General de Sucursales (Laura Reynoso: lreynoso@bv.com.do en QA).
+ * @author            : @dev-salesforce / Keystone Advisors
+ * @group             : PLA Vimenca
+ * @last modified on  : 2026-11-13
+**/
+public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObject>, Database.Stateful {
+
+    @TestVisible
+    private List<BranchIncompleteCase> branchCases;
+    
+    public Integer totalEvaluated;
+    public Integer totalComplete;
+    public Integer totalIncompleteExec;
+    public Integer totalIncompleteBranch;
+
+    private String branchManagerEmail;
+
+    public class BranchIncompleteCase {
+        public String branchName { get; set; }
+        public String clientName { get; set; }
+        public String identificationNumber { get; set; }
+        public String personType { get; set; }
+        public String missingFields { get; set; }
+        public String recordUrl { get; set; }
+    }
+
+    public VFS_PLAAuditBatch() {
+        this.branchCases = new List<BranchIncompleteCase>();
+        this.totalEvaluated = 0;
+        this.totalComplete = 0;
+        this.totalIncompleteExec = 0;
+        this.totalIncompleteBranch = 0;
+        this.branchManagerEmail = 'lreynoso@bv.com.do';
+    }
+
+    public VFS_PLAAuditBatch(String supervisorEmail) {
+        this();
+        if (String.isNotBlank(supervisorEmail)) {
+            this.branchManagerEmail = supervisorEmail;
+        }
+    }
+
+    public Database.QueryLocator start(Database.BatchableContext bc) {
+        return Database.getQueryLocator([
+            SELECT Id, Name, FirstName, MiddleName, LastName, Suffix,
+                   isPersonAccount, ACC_Persona_Fisica__c, ACC_INT_TipoPersona__c,
+                   ACC_INT_Tipo_de_identificacion__c, ACC_NumIdentificacion__c, FinServ__IndividualId__c,
+                   PersonBirthdate, ACC_Fecha_Fundacion__c, ACC_Nacionalidad__c, ACC_INT_Nacionalidad__c,
+                   ACC_Estado_Civil__c, PersonEmail, ACC_Correo_Electronico_Cliente__c, PersonMobilePhone, Phone,
+                   ACC_RNC__c, ACC_Nombre_Corto_Comercial__c, ACC_INT_Tipo_Estructura_Juridica__c,
+                   ACC_Rango_de_Transacciones_estimadas__c, ACC_Persona_PEP__c,
+                   ACC_INT_Pais_Nacimiento__c, ACC_INT_Pais_Residencia_Legal__c,
+                   Industry, OwnerId, Owner.Name, Owner.Email, Owner.IsActive, Owner.Alias
+            FROM Account
+            WHERE ACC_Estado__c = 'ACTIVO'
+              AND ACC_Calificacion_de_cliente__c = null
+        ]);
+    }
+
+    public void execute(Database.BatchableContext bc, List<Account> scope) {
+        this.totalEvaluated += scope.size();
+
+        Set<Id> accountIds = new Map<Id, Account>(scope).keySet();
+        Set<Id> industryIds = new Set<Id>();
+
+        for (Account a : scope) {
+            if (a.Industry != null) {
+                industryIds.add(a.Industry);
+            }
+        }
+
+        Map<Id, String> activityCodeMap = new Map<Id, String>();
+        if (!industryIds.isEmpty()) {
+            for (Datos_Maestros__c dm : [SELECT Id, DM_Direccion__c FROM Datos_Maestros__c WHERE Id IN :industryIds]) {
+                activityCodeMap.put(dm.Id, dm.DM_Direccion__c);
+            }
+        }
+
+        Map<Id, Informacion_Financiera__c> infoFinancieraMap = new Map<Id, Informacion_Financiera__c>();
+        for (Informacion_Financiera__c inf : [
+            SELECT Id, INF_Cuenta__c, INF_INT_Origen_de_los_recursos__c 
+            FROM Informacion_Financiera__c 
+            WHERE INF_Cuenta__c IN :accountIds
+        ]) {
+            infoFinancieraMap.put(inf.INF_Cuenta__c, inf);
+        }
+
+        Map<Id, FinServ__Employment__c> employmentMap = new Map<Id, FinServ__Employment__c>();
+        for (FinServ__Employment__c emp : [
+            SELECT Id, FinServ__Contact__r.AccountId, FinServ__Occupation__c 
+            FROM FinServ__Employment__c 
+            WHERE FinServ__Contact__r.AccountId IN :accountIds
+        ]) {
+            employmentMap.put(emp.FinServ__Contact__r.AccountId, emp);
+        }
+
+        Map<Id, FinServ__FinancialAccountRole__c> accionistaMap = new Map<Id, FinServ__FinancialAccountRole__c>();
+        Map<Id, FinServ__FinancialAccountRole__c> repLegalMap = new Map<Id, FinServ__FinancialAccountRole__c>();
+
+        for (FinServ__FinancialAccountRole__c role : [
+            SELECT Id, FinServ__FinancialAccount__r.FinServ__PrimaryOwner__c,
+                   OwnershipPercentage__c, FinServ__Role__c,
+                   FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c,
+                   FinServ__RelatedAccount__r.ACC_INT_Nacionalidad__c
+            FROM FinServ__FinancialAccountRole__c 
+            WHERE FinServ__FinancialAccount__r.FinServ__PrimaryOwner__c IN :accountIds
+        ]) {
+            if (role.FinServ__Role__c == 'Accionista') {
+                accionistaMap.put(role.FinServ__FinancialAccount__r.FinServ__PrimaryOwner__c, role);
+            } else if (role.FinServ__Role__c == 'Representante Legal') {
+                repLegalMap.put(role.FinServ__FinancialAccount__r.FinServ__PrimaryOwner__c, role);
+            }
+        }
+
+        Set<String> branchAliases = new Set<String>{
+            'sprinc', 'smega', 'sstgo', 'sloved', 'spas27', 'sbav', 'sindep', 'spatcol', 'sagora', 'sucurs'
+        };
+
+        String baseUrl = URL.getOrgDomainUrl().toExternalForm();
+        List<Messaging.SingleEmailMessage> execEmails = new List<Messaging.SingleEmailMessage>();
+
+        for (Account acc : scope) {
+            String actCode = acc.Industry != null ? activityCodeMap.get(acc.Industry) : null;
+            Informacion_Financiera__c inf = infoFinancieraMap.get(acc.Id);
+            FinServ__Employment__c emp = employmentMap.get(acc.Id);
+            FinServ__FinancialAccountRole__c accRole = accionistaMap.get(acc.Id);
+            FinServ__FinancialAccountRole__c repRole = repLegalMap.get(acc.Id);
+
+            VFS_PLADataIntegrityService.AuditResult audit = VFS_PLADataIntegrityService.auditAccount(
+                acc, inf, accRole, repRole, emp, actCode
+            );
+
+            if (audit.isComplete) {
+                this.totalComplete++;
+            } else {
+                Boolean isBranchUser = false;
+                if (acc.Owner != null && acc.Owner.Alias != null && branchAliases.contains(acc.Owner.Alias.toLowerCase())) {
+                    isBranchUser = true;
+                } else if (acc.Owner != null && acc.Owner.Name != null && acc.Owner.Name.toLowerCase().contains('sucursal')) {
+                    isBranchUser = true;
+                }
+
+                String idNumber = acc.isPersonAccount ? acc.FinServ__IndividualId__c : acc.ACC_RNC__c;
+                String fullLink = baseUrl + '/' + acc.Id;
+
+                if (isBranchUser) {
+                    this.totalIncompleteBranch++;
+                    BranchIncompleteCase bCase = new BranchIncompleteCase();
+                    bCase.branchName = acc.Owner.Name;
+                    bCase.clientName = acc.Name;
+                    bCase.identificationNumber = String.isNotBlank(idNumber) ? idNumber : 'Sin Identificación';
+                    bCase.personType = acc.ACC_Persona_Fisica__c ? 'Física' : 'Jurídica';
+                    bCase.missingFields = audit.missingFieldsSummary;
+                    bCase.recordUrl = fullLink;
+                    this.branchCases.add(bCase);
+                } else {
+                    this.totalIncompleteExec++;
+                    if (acc.Owner != null && String.isNotBlank(acc.Owner.Email) && acc.Owner.IsActive) {
+                        Messaging.SingleEmailMessage mail = buildExecutiveEmail(acc, audit, fullLink);
+                        execEmails.add(mail);
+                    }
+                }
+            }
+        }
+
+        if (!execEmails.isEmpty() && Limits.getEmailInvocations() < Limits.getLimitEmailInvocations()) {
+            try {
+                Messaging.sendEmail(execEmails, false);
+            } catch (Exception ex) {
+                System.debug('Error enviando correos a ejecutivos: ' + ex.getMessage());
+            }
+        }
+    }
+
+    public void finish(Database.BatchableContext bc) {
+        if (!this.branchCases.isEmpty() && String.isNotBlank(this.branchManagerEmail)) {
+            sendBranchConsolidatedReport();
+        }
+
+        System.debug('=== FIN VFS_PLAAuditBatch ===');
+        System.debug('Evaluados: ' + this.totalEvaluated + ' | Completos: ' + this.totalComplete + 
+                     ' | Incompletos Ejecutivo: ' + this.totalIncompleteExec + 
+                     ' | Incompletos Sucursales: ' + this.totalIncompleteBranch);
+    }
+
+    private Messaging.SingleEmailMessage buildExecutiveEmail(Account acc, VFS_PLADataIntegrityService.AuditResult audit, String fullLink) {
+        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+        mail.setToAddresses(new List<String>{ acc.Owner.Email });
+        mail.setSubject('⚠️ [PLA Vimenca] Regularización de Datos Requerida - ' + acc.Name);
+
+        String idNum = acc.isPersonAccount ? acc.FinServ__IndividualId__c : acc.ACC_RNC__c;
+        String htmlBody = '<div style="font-family: Arial, sans-serif; color: #333333; line-height: 1.5;">' +
+            '<h2 style="color: #003366;">Aviso de Datos Pendientes para Precalificación PLA</h2>' +
+            '<p>Estimado(a) <b>' + acc.Owner.Name + '</b>,</p>' +
+            '<p>Se ha identificado que el siguiente cliente asignado a su cartera no cuenta con la totalidad de campos requeridos para la matriz de precalificación de riesgo PLA:</p>' +
+            '<ul>' +
+            '  <li><b>Cliente:</b> ' + acc.Name + '</li>' +
+            '  <li><b>Identificación:</b> ' + (String.isNotBlank(idNum) ? idNum : 'N/D') + '</li>' +
+            '  <li><b>Enlace Directo:</b> <a href="' + fullLink + '" style="color: #006699;">Abrir Ficha del Cliente en Salesforce</a></li>' +
+            '</ul>' +
+            '<h3 style="color: #c0392b;">Campos Pendientes por Completar:</h3>' +
+            '<ol>';
+
+        for (String field : audit.missingFields) {
+            htmlBody += '<li><b>' + field + '</b></li>';
+        }
+
+        htmlBody += '</ol>' +
+            '<p style="font-size: 11px; color: #7f8c8d;">Este proceso es automatizado por el Sistema de Prevención de Lavado de Activos (PLA) de Banco Vimenca.</p>' +
+            '</div>';
+
+        mail.setHtmlBody(htmlBody);
+        return mail;
+    }
+
+    private void sendBranchConsolidatedReport() {
+        Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
+        mail.setToAddresses(new List<String>{ this.branchManagerEmail });
+        mail.setSubject('📊 [PLA Vimenca] Informe Consolidado de Sucursales - Clientes con Datos Incompletos');
+
+        String csvContent = 'Codigo_Sucursal,Nombre_Sucursal,Identificacion,Nombre_Cliente,Tipo_Persona,Campos_Faltantes,Enlace_Salesforce\n';
+        for (BranchIncompleteCase c : this.branchCases) {
+            csvContent += '"' + c.branchName + '","' + c.branchName + '","' + c.identificationNumber + '","' + 
+                          c.clientName.replace('"', '""') + '","' + c.personType + '","' + 
+                          c.missingFields.replace('"', '""') + '","' + c.recordUrl + '"\n';
+        }
+
+        Messaging.EmailFileAttachment attachment = new Messaging.EmailFileAttachment();
+        attachment.setFileName('Informe_Consolidado_Sucursales_PLA_' + Datetime.now().format('yyyyMMdd') + '.csv');
+        attachment.setBody(Blob.valueOf(csvContent));
+        attachment.setContentType('text/csv');
+        mail.setFileAttachments(new List<Messaging.EmailFileAttachment>{ attachment });
+
+        String htmlBody = '<div style="font-family: Arial, sans-serif; color: #333333; line-height: 1.4;">' +
+            '<h2 style="color: #003366;">Informe Consolidado de Clientes en Sucursales para Subsanación PLA</h2>' +
+            '<p>Estimada Encargada General de Sucursales <b>(Laura Reynoso)</b>,</p>' +
+            '<p>Se adjunta el reporte detallado con los <b>' + this.branchCases.size() + '</b> clientes radicados en usuarios virtuales de agencia que requieren actualización de datos obligatorios.</p>' +
+            '<p>Puede abrir el archivo CSV adjunto para filtrar por sucursal y distribuir las listas operativas a cada oficina.</p>' +
+            '<p style="font-size: 11px; color: #7f8c8d;">Generado automáticamente por el motor nocturno de integridad de datos PLA - Banco Vimenca.</p>' +
+            '</div>';
+
+        mail.setHtmlBody(htmlBody);
+
+        try {
+            Messaging.sendEmail(new List<Messaging.SingleEmailMessage>{ mail }, false);
+        } catch (Exception e) {
+            System.debug('Error enviando informe consolidado a supervisión: ' + e.getMessage());
+        }
+    }
+}
