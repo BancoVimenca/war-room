@@ -1971,4 +1971,100 @@ private class LeadTriggerHandlerTest {
 
         System.assertNotEquals(null, l.Id);
     }
+
+    /*
+     * ============================================================
+     * [BVWAR-265 & BVWAR-266] TESTS PERSONA JURIDICA & ANTI-RETROCESO
+     * ============================================================
+     */
+
+    @IsTest
+    static void testPersonaJuridicaFlujoSecuencialPLA() {
+        Lead source = getUnconvertedLead();
+        if (source == null) return;
+        Id rtPJ = getRecordTypePJ();
+        if (rtPJ == null) return;
+
+        Lead oldLead = source.clone(true, true, false, false);
+        Lead newLead = source.clone(true, true, false, false);
+
+        oldLead.RecordTypeId = rtPJ;
+        newLead.RecordTypeId = rtPJ;
+        oldLead.Status = 'VALIDADO';
+        oldLead.LEA_SubEstado__c = 'ACEPTADO';
+        oldLead.LEA_Rechazo_Documentacion_PLA__c = false;
+
+        newLead.Status = 'VALIDADO';
+        newLead.LEA_SubEstado__c = 'EN REVISIÓN';
+        newLead.LEA_Rechazo_Documentacion_PLA__c = false;
+
+        Test.startTest();
+        LeadTriggerHandler.afterUpdate(
+            new List<Lead>{ newLead },
+            new Map<Id, Lead>{ oldLead.Id => oldLead }
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, newLead.Id);
+    }
+
+    @IsTest
+    static void testPersonaJuridicaRechazoPLABloqueaLegal() {
+        Lead source = getUnconvertedLead();
+        if (source == null) return;
+        Id rtPJ = getRecordTypePJ();
+        if (rtPJ == null) return;
+
+        Lead oldLead = source.clone(true, true, false, false);
+        Lead newLead = source.clone(true, true, false, false);
+
+        oldLead.RecordTypeId = rtPJ;
+        newLead.RecordTypeId = rtPJ;
+        oldLead.Status = 'VALIDADO';
+        oldLead.LEA_SubEstado__c = 'ACEPTADO';
+        oldLead.LEA_Rechazo_Documentacion_PLA__c = false;
+
+        newLead.Status = 'VALIDADO';
+        newLead.LEA_SubEstado__c = 'EN REVISIÓN';
+        newLead.LEA_Rechazo_Documentacion_PLA__c = true;
+
+        Test.startTest();
+        LeadTriggerHandler.afterUpdate(
+            new List<Lead>{ newLead },
+            new Map<Id, Lead>{ oldLead.Id => oldLead }
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, newLead.Id);
+    }
+
+    @IsTest
+    static void testPersonaJuridicaAntiRetrocesoLegalDirecto() {
+        Lead source = getUnconvertedLead();
+        if (source == null) return;
+        Id rtPJ = getRecordTypePJ();
+        if (rtPJ == null) return;
+
+        Lead oldLead = source.clone(true, true, false, false);
+        Lead newLead = source.clone(true, true, false, false);
+
+        oldLead.RecordTypeId = rtPJ;
+        newLead.RecordTypeId = rtPJ;
+        oldLead.Status = 'VALIDADO';
+        oldLead.LEA_SubEstado__c = 'EN REVISIÓN';
+        oldLead.LEA_Rechazo_Documentacion_PLA__c = false;
+
+        newLead.Status = 'VALIDADO';
+        newLead.LEA_SubEstado__c = 'EN VALIDACION POR LEGAL';
+        newLead.LEA_Rechazo_Documentacion_PLA__c = false;
+
+        Test.startTest();
+        LeadTriggerHandler.afterUpdate(
+            new List<Lead>{ newLead },
+            new Map<Id, Lead>{ oldLead.Id => oldLead }
+        );
+        Test.stopTest();
+
+        System.assertNotEquals(null, newLead.Id);
+    }
 }

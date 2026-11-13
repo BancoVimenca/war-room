@@ -323,6 +323,7 @@ public with sharing class LeadTriggerHandler {
 
                 String rtDevName = newLead.RecordType != null ? newLead.RecordType.DeveloperName : '';
                 Boolean isPersonaFisica = (rtDevName == 'Candidato_Persona_Natural' || rtDevName == 'Candidato_Persona_Fisica');
+                Boolean isPersonaJuridica = (rtDevName == 'Candidato_Persona_Juridica');
 
                 if (isPersonaFisica) {
                     // Regla BVWAR-264: Persona Física solo va a PLA si hay alerta por listas restrictivas
@@ -340,8 +341,21 @@ public with sharing class LeadTriggerHandler {
                     if (esCedula && alertaPadronTec) {
                         leadIdsPFAlertTecnologia.add(newLead.Id);
                     }
+                } else if (isPersonaJuridica) {
+                    // [BVWAR-265 / BVWAR-266] Persona Jurídica:
+                    // 1) Si está en estado EN VALIDACION POR LEGAL y ya fue aprobada por PLA, NO debe regresar a PLA.
+                    Lead oldLeadRecord = (oldMap != null && oldMap.containsKey(newLead.Id)) ? oldMap.get(newLead.Id) : null;
+                    Boolean vieneDeLegal = (newLead.LEA_SubEstado__c == 'EN VALIDACION POR LEGAL' ||
+                                           (oldLeadRecord != null && oldLeadRecord.LEA_SubEstado__c == 'EN VALIDACION POR LEGAL'));
+
+                    // 2) Si PLA rechazó (LEA_Rechazo_Documentacion_PLA__c == true), se detiene y NO continúa a Legal.
+                    Boolean rechazoPLA = (newLead.LEA_Rechazo_Documentacion_PLA__c == true);
+
+                    if (!rechazoPLA) {
+                        leadIdsToSubmit.add(newLead.Id);
+                    }
                 } else {
-                    // Persona Jurídica o flujo estándar de documentación
+                    // Otros tipos de registro / flujo general
                     Boolean tieneDocsNoAprobados =
                         newLead.LEA_Doc_Legal_No_Aprobada__c != null &&
                         newLead.LEA_Doc_Legal_No_Aprobada__c > 0;
@@ -505,18 +519,34 @@ public with sharing class LeadTriggerHandler {
                 pendingLeadIds.add(instance.TargetObjectId);
             }
 
+            Map<Id, Lead> targetLeads = new Map<Id, Lead>([
+                SELECT Id, RecordType.DeveloperName, LEA_SubEstado__c, LEA_Rechazo_Documentacion_PLA__c
+                FROM Lead
+                WHERE Id IN :leadIds
+            ]);
+
             for (Id leadId : leadIds) {
                 if (pendingLeadIds.contains(leadId)) {
                     continue;
                 }
 
+                Lead l = targetLeads.get(leadId);
+                if (l != null && l.LEA_Rechazo_Documentacion_PLA__c == true) {
+                    // BVWAR-265: Si PLA rechazó, se detiene y no avanza a Legal
+                    continue;
+                }
+
                 Approval.ProcessSubmitRequest request = new Approval.ProcessSubmitRequest();
                 request.setObjectId(leadId);
-                request.setProcessDefinitionNameOrId('Aprobacion_de_Candidatos_por_Legal');
+                // Si ya fue aprobado por PLA y está en circuito legal, se envía al proceso legal correspondiente
+                if (l != null && l.LEA_SubEstado__c == 'EN VALIDACION POR LEGAL') {
+                    request.setProcessDefinitionNameOrId('PA_Flujo_Aprobacion_LEAD');
+                    request.setComments('Enviado directamente a cola Legal (Anti-Retroceso a PLA cumplido tras aprobación previa).');
+                } else {
+                    request.setProcessDefinitionNameOrId('Aprobacion_de_Candidatos_por_Legal');
+                    request.setComments('Orquestación Persona Jurídica: Enviado a revisión PLA (Paso Obligatorio 1).');
+                }
                 request.setSubmitterId(UserInfo.getUserId());
-                request.setComments(
-                    'Enviado automaticamente a revision PLA porque posee documentos legales no aprobados.'
-                );
 
                 Approval.ProcessResult result = Approval.process(request);
                 if (!result.isSuccess()) {
