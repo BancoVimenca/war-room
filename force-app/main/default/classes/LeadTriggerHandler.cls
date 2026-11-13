@@ -306,7 +306,8 @@ public with sharing class LeadTriggerHandler {
             Map<Id, Lead> freshLeads = new Map<Id, Lead>([
                 SELECT Id, RecordTypeId, RecordType.DeveloperName, LEA_TipoIdentificacion__c,
                        LEA_Coincidencia_Listas_Internas__c, LEA_Coincidencia_Listas_Externas__c, LEA_Listas__c,
-                       LEA_Estado_Aprobacion_Tecnologia__c, LEA_Doc_Legal_No_Aprobada__c
+                       LEA_Estado_Aprobacion_Tecnologia__c, LEA_Doc_Legal_No_Aprobada__c,
+                       LEA_SubEstado__c, LEA_Rechazo_Documentacion_PLA__c
                 FROM Lead
                 WHERE Id IN :leadIdsInScope
             ]);
