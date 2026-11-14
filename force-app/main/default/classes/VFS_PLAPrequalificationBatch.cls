@@ -58,6 +58,7 @@ public with sharing class VFS_PLAPrequalificationBatch implements Database.Batch
             FROM Account
             WHERE ACC_Estado__c = 'ACTIVO'
               AND ACC_Calificacion_de_cliente__c = null
+              AND RecordType.DeveloperName IN ('PersonAccount', 'Personas_Juridicas')
         ]);
     }
 
@@ -71,8 +72,10 @@ public with sharing class VFS_PLAPrequalificationBatch implements Database.Batch
         Set<Id> accountIds = new Map<Id, Account>(scope).keySet();
         Set<Id> industryIds = new Set<Id>();
         for (Account a : scope) {
-            if (a.Industry != null) {
-                industryIds.add(a.Industry);
+            if (String.isNotBlank(a.Industry)) {
+                try {
+                    industryIds.add((Id)a.Industry);
+                } catch (Exception e) {}
             }
         }
 
@@ -128,7 +131,12 @@ public with sharing class VFS_PLAPrequalificationBatch implements Database.Batch
 
         for (Account acc : scope) {
             this.totalProcessed++;
-            String actCode = acc.Industry != null ? activityCodeMap.get(acc.Industry) : null;
+            String actCode = null;
+            if (String.isNotBlank(acc.Industry)) {
+                try {
+                    actCode = activityCodeMap.get((Id)acc.Industry);
+                } catch (Exception e) {}
+            }
             Informacion_Financiera__c inf = infoMap.get(acc.Id);
             FinServ__Employment__c emp = empMap.get(acc.Id);
             FinServ__FinancialAccountRole__c aRole = accRoleMap.get(acc.Id);

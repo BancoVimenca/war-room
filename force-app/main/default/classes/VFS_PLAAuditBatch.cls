@@ -17,7 +17,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
     public Integer totalIncompleteExec;
     public Integer totalIncompleteBranch;
 
-    private String branchManagerEmail;
+    private List<String> branchManagerEmails;
 
     public class BranchIncompleteCase {
         public String branchName { get; set; }
@@ -34,13 +34,16 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         this.totalComplete = 0;
         this.totalIncompleteExec = 0;
         this.totalIncompleteBranch = 0;
-        this.branchManagerEmail = 'lreynoso@bv.com.do';
+        // Laura Reynoso (Encargada de Sucursales en QA) y Rodrigo Díaz (Validación Técnica)
+        this.branchManagerEmails = new List<String>{ 'lreynoso@bv.com.do', 'rdiazg@keystoneadvisors.cl' };
     }
 
     public VFS_PLAAuditBatch(String supervisorEmail) {
         this();
         if (String.isNotBlank(supervisorEmail)) {
-            this.branchManagerEmail = supervisorEmail;
+            if (!this.branchManagerEmails.contains(supervisorEmail)) {
+                this.branchManagerEmails.add(supervisorEmail);
+            }
         }
     }
 
@@ -58,6 +61,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
             FROM Account
             WHERE ACC_Estado__c = 'ACTIVO'
               AND ACC_Calificacion_de_cliente__c = null
+              AND RecordType.DeveloperName IN ('PersonAccount', 'Personas_Juridicas')
         ]);
     }
 
@@ -68,8 +72,13 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         Set<Id> industryIds = new Set<Id>();
 
         for (Account a : scope) {
-            if (a.Industry != null) {
-                industryIds.add(a.Industry);
+            if (String.isNotBlank(a.Industry)) {
+                try {
+                    Id validId = (Id)a.Industry;
+                    industryIds.add(validId);
+                } catch (Exception exId) {
+                    // Si el campo Industry contiene un texto libre o picklist en vez de Id
+                }
             }
         }
 
@@ -124,7 +133,12 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         List<Messaging.SingleEmailMessage> execEmails = new List<Messaging.SingleEmailMessage>();
 
         for (Account acc : scope) {
-            String actCode = acc.Industry != null ? activityCodeMap.get(acc.Industry) : null;
+            String actCode = null;
+            if (String.isNotBlank(acc.Industry)) {
+                try {
+                    actCode = activityCodeMap.get((Id)acc.Industry);
+                } catch (Exception e) {}
+            }
             Informacion_Financiera__c inf = infoFinancieraMap.get(acc.Id);
             FinServ__Employment__c emp = employmentMap.get(acc.Id);
             FinServ__FinancialAccountRole__c accRole = accionistaMap.get(acc.Id);
@@ -177,7 +191,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
     }
 
     public void finish(Database.BatchableContext bc) {
-        if (!this.branchCases.isEmpty() && String.isNotBlank(this.branchManagerEmail)) {
+        if (!this.branchCases.isEmpty() && !this.branchManagerEmails.isEmpty()) {
             sendBranchConsolidatedReport();
         }
 
@@ -219,7 +233,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
 
     private void sendBranchConsolidatedReport() {
         Messaging.SingleEmailMessage mail = new Messaging.SingleEmailMessage();
-        mail.setToAddresses(new List<String>{ this.branchManagerEmail });
+        mail.setToAddresses(this.branchManagerEmails);
         mail.setSubject('📊 [PLA Vimenca] Informe Consolidado de Sucursales - Clientes con Datos Incompletos');
 
         String csvContent = 'Codigo_Sucursal,Nombre_Sucursal,Identificacion,Nombre_Cliente,Tipo_Persona,Campos_Faltantes,Enlace_Salesforce\n';

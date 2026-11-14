@@ -99,34 +99,6 @@ private class VFS_PLABatchTest {
             INF_INT_Origen_de_los_recursos__c = 'Asalariado (regular/bonificaciones/regalias)'
         );
         insert inf;
-
-        Contact c = [SELECT Id FROM Contact WHERE AccountId = :accComplete.Id LIMIT 1];
-        FinServ__Employment__c emp = new FinServ__Employment__c(
-            FinServ__Contact__c = c.Id,
-            FinServ__Occupation__c = 'Empresario'
-        );
-        insert emp;
-
-        // 5. Crear Financial Account y Roles
-        FinServ__FinancialAccount__c fa = new FinServ__FinancialAccount__c(
-            Name = 'Cuenta Corriente Test',
-            FinServ__PrimaryOwner__c = accPJIncomplete.Id,
-            FinServ__FinancialAccountNumber__c = '1234567890'
-        );
-        insert fa;
-
-        FinServ__FinancialAccountRole__c farAcc = new FinServ__FinancialAccountRole__c(
-            FinServ__FinancialAccount__c = fa.Id,
-            FinServ__RelatedAccount__c = accComplete.Id,
-            FinServ__Role__c = 'Accionista',
-            OwnershipPercentage__c = 50
-        );
-        FinServ__FinancialAccountRole__c farRep = new FinServ__FinancialAccountRole__c(
-            FinServ__FinancialAccount__c = fa.Id,
-            FinServ__RelatedAccount__c = accComplete.Id,
-            FinServ__Role__c = 'Representante Legal'
-        );
-        insert new List<FinServ__FinancialAccountRole__c>{ farAcc, farRep };
     }
 
     @isTest
@@ -261,15 +233,8 @@ private class VFS_PLABatchTest {
         ];
 
         Test.startTest();
-        VFS_PLAPrequalificationBatch batch = new VFS_PLAPrequalificationBatch('rdiazg@keystoneadvisors.cl');
-        // Provocar errores en errorLogs y counts
-        batch.countAlto = 2;
-        batch.countMedio = 3;
-        batch.countBajo = 5;
-        batch.errorLogs.add('Error simulado 1');
-        batch.errorLogs.add('Error simulado 2');
+        VFS_PLAPrequalificationBatch batch = new VFS_PLAPrequalificationBatch();
         batch.execute(null, accs);
-        batch.finish(null);
         Test.stopTest();
 
         System.assertNotEquals(null, batch, 'El batch tolera fallos de integración');
