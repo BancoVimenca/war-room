@@ -3,6 +3,7 @@
  *              Garantiza que toda cuenta Persona Física y Jurídica que tenga registros de
  *              teléfono, email o dirección cuente con al menos uno marcado como IsPrimary = true.
  *              Si no tiene ninguno marcado, selecciona el primero/más reciente y lo marca como principal.
+ *              Organiza las listas de actualización por sObjectType homogéneo para evitar el error de chunking de Salesforce.
  * @author Keystone Advisors - @dev-salesforce
  * @correlative SOL-0269
  */
@@ -77,7 +78,9 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
             addressesByAccount.get(cpa.ParentId).add(cpa);
         }
 
-        List<sObject> recordsToUpdate = new List<sObject>();
+        List<ContactPointPhone> phonesToUpdate = new List<ContactPointPhone>();
+        List<ContactPointEmail> emailsToUpdate = new List<ContactPointEmail>();
+        List<ContactPointAddress> addressesToUpdate = new List<ContactPointAddress>();
 
         for (Id accId : accountIds) {
             // Evaluación de Teléfonos
@@ -93,7 +96,7 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
                 if (!hasPrimaryPhone && !phones.isEmpty()) {
                     ContactPointPhone target = phones[0];
                     target.IsPrimary = true;
-                    recordsToUpdate.add(target);
+                    phonesToUpdate.add(target);
                     phonesUpdated++;
                 }
             }
@@ -111,7 +114,7 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
                 if (!hasPrimaryEmail && !emails.isEmpty()) {
                     ContactPointEmail target = emails[0];
                     target.IsPrimary = true;
-                    recordsToUpdate.add(target);
+                    emailsToUpdate.add(target);
                     emailsUpdated++;
                 }
             }
@@ -129,21 +132,33 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
                 if (!hasPrimaryAddress && !addresses.isEmpty()) {
                     ContactPointAddress target = addresses[0];
                     target.IsPrimary = true;
-                    recordsToUpdate.add(target);
+                    addressesToUpdate.add(target);
                     addressesUpdated++;
                 }
             }
         }
 
-        // Ejecución DML Parcial (no abortivo ante errores puntuales de validación)
-        if (!recordsToUpdate.isEmpty()) {
-            Database.SaveResult[] results = Database.update(recordsToUpdate, false);
-            for (Integer i = 0; i < results.size(); i++) {
-                if (!results[i].isSuccess()) {
-                    String msg = 'AccountId/RecordId: ' + recordsToUpdate[i].Id + ' - Error: ' + results[i].getErrors()[0].getMessage();
-                    errorLogs.add(msg);
-                    System.debug(LoggingLevel.ERROR, '>>> [SOL-0269] ' + msg);
-                }
+        // Ejecución DML por tipo para evitar el límite de chunks de Salesforce (máximo 10 cambios de tipo en lista heterogénea)
+        if (!phonesToUpdate.isEmpty()) {
+            Database.SaveResult[] results = Database.update(phonesToUpdate, false);
+            handleSaveResults(results, phonesToUpdate);
+        }
+        if (!emailsToUpdate.isEmpty()) {
+            Database.SaveResult[] results = Database.update(emailsToUpdate, false);
+            handleSaveResults(results, emailsToUpdate);
+        }
+        if (!addressesToUpdate.isEmpty()) {
+            Database.SaveResult[] results = Database.update(addressesToUpdate, false);
+            handleSaveResults(results, addressesToUpdate);
+        }
+    }
+
+    private void handleSaveResults(Database.SaveResult[] results, List<sObject> records) {
+        for (Integer i = 0; i < results.size(); i++) {
+            if (!results[i].isSuccess()) {
+                String msg = 'RecordId: ' + records[i].Id + ' - Error: ' + results[i].getErrors()[0].getMessage();
+                errorLogs.add(msg);
+                System.debug(LoggingLevel.ERROR, '>>> [SOL-0269] ' + msg);
             }
         }
     }
