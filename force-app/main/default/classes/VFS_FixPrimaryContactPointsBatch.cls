@@ -67,10 +67,10 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
         // 3. Mapeo de ContactPointAddress por Cuenta
         Map<Id, List<ContactPointAddress>> addressesByAccount = new Map<Id, List<ContactPointAddress>>();
         for (ContactPointAddress cpa : [
-            SELECT Id, ParentId, IsPrimary, CreatedDate 
+            SELECT Id, ParentId, IsPrimary, IsDefault, CreatedDate 
             FROM ContactPointAddress 
             WHERE ParentId IN :accountIds 
-            ORDER BY IsPrimary DESC, CreatedDate DESC
+            ORDER BY IsPrimary DESC, IsDefault DESC, CreatedDate DESC
         ]) {
             if (!addressesByAccount.containsKey(cpa.ParentId)) {
                 addressesByAccount.put(cpa.ParentId, new List<ContactPointAddress>());
@@ -119,12 +119,12 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
                 }
             }
 
-            // Evaluación de Direcciones
+            // Evaluación de Direcciones (Garantizar IsPrimary = true e IsDefault = true)
             if (addressesByAccount.containsKey(accId)) {
                 List<ContactPointAddress> addresses = addressesByAccount.get(accId);
                 Boolean hasPrimaryAddress = false;
                 for (ContactPointAddress a : addresses) {
-                    if (a.IsPrimary == true) {
+                    if (a.IsPrimary == true && a.IsDefault == true) {
                         hasPrimaryAddress = true;
                         break;
                     }
@@ -132,6 +132,7 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
                 if (!hasPrimaryAddress && !addresses.isEmpty()) {
                     ContactPointAddress target = addresses[0];
                     target.IsPrimary = true;
+                    target.IsDefault = true;
                     addressesToUpdate.add(target);
                     addressesUpdated++;
                 }
