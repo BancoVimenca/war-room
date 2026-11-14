@@ -10,12 +10,22 @@ private class VFS_FixPrimaryContactPointsBatchTest {
 
     @testSetup
     static void setupTestData() {
-        // Crear cuentas de prueba
+        // Consultar RecordType disponible para inserción sin conflicto
+        Id rtId = [
+            SELECT Id 
+            FROM RecordType 
+            WHERE SobjectType = 'Account' AND DeveloperName = 'Candidato_Persona_Juridica' 
+            LIMIT 1
+        ].Id;
+
+        // Crear cuentas de prueba con el RecordType explícito
         Account accWithNoPrimary = new Account(
-            Name = 'Empresa Prueba Sin Primario SRL'
+            Name = 'Empresa Prueba Sin Primario SRL',
+            RecordTypeId = rtId
         );
         Account accWithPrimary = new Account(
-            Name = 'Empresa Prueba Con Primario SA'
+            Name = 'Empresa Prueba Con Primario SA',
+            RecordTypeId = rtId
         );
         insert new List<Account>{ accWithNoPrimary, accWithPrimary };
 

@@ -15,12 +15,15 @@ public without sharing class VFS_FixPrimaryContactPointsBatch implements Databas
     public List<String> errorLogs = new List<String>();
 
     public Database.QueryLocator start(Database.BatchableContext bc) {
-        // Selecciona cuentas Persona Física y Jurídica (o todas las cuentas estándar/FSC)
+        // Selecciona cuentas evaluando tanto los record types de cliente como cuentas en general
         return Database.getQueryLocator([
             SELECT Id, RecordType.DeveloperName 
             FROM Account 
-            WHERE RecordType.DeveloperName IN ('IndustriesIndividual', 'IndustriesBusiness', 'PersonAccount')
-               OR RecordTypeId = null
+            WHERE RecordType.DeveloperName IN (
+                'IndustriesIndividual', 'IndustriesBusiness', 'PersonAccount', 
+                'Personas_Juridicas', 'Candidato_Persona_Fisica', 'Candidato_Persona_Juridica'
+            )
+            OR RecordTypeId = null
         ]);
     }
 
