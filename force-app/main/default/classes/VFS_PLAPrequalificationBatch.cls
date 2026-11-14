@@ -146,7 +146,8 @@ public with sharing class VFS_PLAPrequalificationBatch implements Database.Batch
                 acc, inf, aRole, rRole, emp, actCode
             );
 
-            if (!audit.isComplete) {
+            // Requisito regulatorio: Solo avanzar a precalificación si cumple 100% de la matriz PLA (MacroProcesos)
+            if (!audit.isPrequalificationReady) {
                 continue;
             }
 

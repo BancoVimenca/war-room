@@ -26,7 +26,8 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         public String personType { get; set; }
         public String idType { get; set; }
         public String idNumber { get; set; }
-        public String missingFields { get; set; }
+        public String missingFieldsPLA { get; set; }
+        public String contactWarnings { get; set; }
         public String recordUrl { get; set; }
     }
 
@@ -194,7 +195,8 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
                     bCase.personType = acc.isPersonAccount ? 'Física' : 'Jurídica';
                     bCase.idType = String.isNotBlank(acc.ACC_INT_Tipo_de_identificacion__c) ? acc.ACC_INT_Tipo_de_identificacion__c : 'N/D';
                     bCase.idNumber = String.isNotBlank(idNumber) ? idNumber : 'Sin Identificación';
-                    bCase.missingFields = audit.missingFieldsSummary;
+                    bCase.missingFieldsPLA = audit.missingFieldsSummary;
+                    bCase.contactWarnings = audit.contactWarningsSummary;
                     bCase.recordUrl = fullLink;
                     this.branchCases.add(bCase);
                 } else {
@@ -262,7 +264,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         mail.setToAddresses(this.branchManagerEmails);
         mail.setSubject('📊 [PLA Vimenca] Informe Consolidado de Sucursales - Clientes con Datos Incompletos');
 
-        String csvContent = 'Codigo_Sucursal,Nombre_Sucursal,Nombre_Cliente,Tipo_Persona,Tipo_Identificacion,Numero_Identificacion_o_RNC,Campos_Faltantes,Enlace_Salesforce\n';
+        String csvContent = 'Codigo_Sucursal,Nombre_Sucursal,Nombre_Cliente,Tipo_Persona,Tipo_Identificacion,Numero_Identificacion_o_RNC,Campos_Faltantes_PLA,Pendientes_Contacto,Enlace_Salesforce\n';
         for (BranchIncompleteCase c : this.branchCases) {
             csvContent += '"' + c.branchCode + '","' + 
                           c.branchName + '","' + 
@@ -270,7 +272,8 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
                           c.personType + '","' + 
                           c.idType + '","' + 
                           c.idNumber + '","' + 
-                          c.missingFields.replace('"', '""') + '","' + 
+                          c.missingFieldsPLA.replace('"', '""') + '","' + 
+                          c.contactWarnings.replace('"', '""') + '","' + 
                           c.recordUrl + '"\n';
         }
 

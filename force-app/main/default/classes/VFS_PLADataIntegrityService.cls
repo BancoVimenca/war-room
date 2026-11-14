@@ -10,28 +10,48 @@ public with sharing class VFS_PLADataIntegrityService {
 
     public class AuditResult {
         public Boolean isComplete { get; set; }
+        public Boolean isPrequalificationReady { get; set; }
         public List<String> missingFields { get; set; }
         public String missingFieldsSummary { get; set; }
+        public List<String> contactWarnings { get; set; }
+        public String contactWarningsSummary { get; set; }
 
         public AuditResult() {
             this.isComplete = true;
+            this.isPrequalificationReady = true;
             this.missingFields = new List<String>();
             this.missingFieldsSummary = '';
+            this.contactWarnings = new List<String>();
+            this.contactWarningsSummary = 'Contacto Completo';
         }
 
         public void addMissingField(String fieldLabel) {
             this.isComplete = false;
+            this.isPrequalificationReady = false;
             this.missingFields.add(fieldLabel);
+        }
+
+        public void addContactWarning(String warningLabel) {
+            this.isComplete = false;
+            this.contactWarnings.add(warningLabel);
         }
 
         public void finalizeSummary() {
             if (this.missingFields.isEmpty()) {
-                this.isComplete = true;
-                this.missingFieldsSummary = 'Datos 100% Completos';
+                this.isPrequalificationReady = true;
+                this.missingFieldsSummary = 'Ninguno (Apto para Precalificación)';
             } else {
-                this.isComplete = false;
+                this.isPrequalificationReady = false;
                 this.missingFieldsSummary = String.join(this.missingFields, '; ');
             }
+
+            if (this.contactWarnings.isEmpty()) {
+                this.contactWarningsSummary = 'Contacto Completo';
+            } else {
+                this.contactWarningsSummary = String.join(this.contactWarnings, '; ');
+            }
+
+            this.isComplete = this.missingFields.isEmpty() && this.contactWarnings.isEmpty();
         }
     }
 
@@ -74,11 +94,12 @@ public with sharing class VFS_PLADataIntegrityService {
             if (String.isBlank(acc.ACC_Estado_Civil__c)) {
                 result.addMissingField('Estado Civil');
             }
+            // Alertas Operativas de Contacto (NO bloquean la precalificación PLA en MacroProcesos)
             if (String.isBlank(acc.PersonEmail) && String.isBlank(acc.ACC_Correo_Electronico_Cliente__c)) {
-                result.addMissingField('Correo Electrónico');
+                result.addContactWarning('Sin Correo Electrónico');
             }
             if (String.isBlank(acc.PersonMobilePhone) && String.isBlank(acc.Phone)) {
-                result.addMissingField('Teléfono Principal (Móvil/Residencial)');
+                result.addContactWarning('Sin Teléfono Registrado');
             }
         } else {
             // Persona Jurídica

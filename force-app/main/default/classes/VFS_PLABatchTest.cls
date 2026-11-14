@@ -164,7 +164,8 @@ private class VFS_PLABatchTest {
         bCase.personType = 'Física';
         bCase.idType = 'Cédula';
         bCase.idNumber = '00100000000';
-        bCase.missingFields = 'Teléfono, Correo';
+        bCase.missingFieldsPLA = 'Actividad Económica';
+        bCase.contactWarnings = 'Sin Teléfono Registrado';
         bCase.recordUrl = 'https://vimenca.salesforce.com/001';
         batch.branchCases.add(bCase);
 
