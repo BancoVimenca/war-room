@@ -63,6 +63,15 @@ public with sharing class VFS_PLAPrequalificationBatch implements Database.Batch
     }
 
     public void execute(Database.BatchableContext bc, List<Account> scope) {
+        // Conmutador Administrativo ON/OFF vía Custom Setting PLA_Configuracion__c
+        PLA_Configuracion__c config = PLA_Configuracion__c.getInstance();
+        if (config != null && config.Id != null) {
+            if (!config.Activo__c || !config.Precalificacion_Activa__c) {
+                System.debug('VFS_PLAPrequalificationBatch: Precalificación pausada administrativamente vía PLA_Configuracion__c');
+                return;
+            }
+        }
+
         Time currentTime = Datetime.now().time();
         if (!Test.isRunningTest() && currentTime >= Time.newInstance(6, 0, 0, 0) && currentTime < Time.newInstance(18, 0, 0, 0)) {
             System.debug('Circuit Breaker: Fuera de ventana nocturna (18:00 - 06:00 hrs). Pausando procesamiento de lotes.');

@@ -69,6 +69,15 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
     }
 
     public void execute(Database.BatchableContext bc, List<Account> scope) {
+        // Conmutador Administrativo ON/OFF vía Custom Setting PLA_Configuracion__c
+        PLA_Configuracion__c config = PLA_Configuracion__c.getInstance();
+        if (config != null && config.Id != null) {
+            if (!config.Activo__c || !config.Auditoria_Activa__c) {
+                System.debug('VFS_PLAAuditBatch: Proceso de auditoría pausado administrativamente vía PLA_Configuracion__c');
+                return;
+            }
+        }
+
         this.totalEvaluated += scope.size();
 
         // 0. Auto-reparación preventiva: Garantizar que Cuentas Personales tengan ACC_Persona_Fisica__c = true

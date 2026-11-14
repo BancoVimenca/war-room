@@ -8,6 +8,15 @@
         <members>VFS_PLABatchTest</members>
         <name>ApexClass</name>
     </types>
+    <types>
+        <members>PLA_Configuracion__c</members>
+        <name>CustomObject</name>
+    </types>
+    <types>
+        <members>PLA_Configuracion__c.Activo__c</members>
+        <members>PLA_Configuracion__c.Auditoria_Activa__c</members>
+        <members>PLA_Configuracion__c.Precalificacion_Activa__c</members>
+        <name>CustomField</name>
+    </types>
     <version>62.0</version>
 </Package>
-
