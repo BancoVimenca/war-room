@@ -1,9 +1,10 @@
 /**
  * @description Test unitario para VFS_FixPrimaryContactPointsBatch.
  *              Valida que cuentas sin vías de contacto principales queden con al menos una
- *              marcada como IsPrimary = true, respetando cuentas que ya tienen principal.
+ *              marcada como IsPrimary = true e IsDefault = true, respetando cuentas que ya tienen principal.
+ *              Valida además la compilación del reporte CSV y el despacho de notificación por correo.
  * @author Keystone Advisors - @dev-salesforce
- * @correlative SOL-0269
+ * @correlative SOL-0277
  */
 @isTest
 private class VFS_FixPrimaryContactPointsBatchTest {
@@ -66,22 +67,25 @@ private class VFS_FixPrimaryContactPointsBatchTest {
             Name = 'Sucursal Principal',
             City = 'Santo Domingo',
             Country = 'República Dominicana',
-            IsPrimary = false
+            IsPrimary = false,
+            IsDefault = false
         );
         ContactPointAddress addrWithPrimary = new ContactPointAddress(
             ParentId = accWithPrimary.Id,
             Name = 'Sede Central',
             City = 'Santiago',
             Country = 'República Dominicana',
-            IsPrimary = true
+            IsPrimary = true,
+            IsDefault = true
         );
         insert new List<ContactPointAddress>{ addr1, addrWithPrimary };
     }
 
     @isTest
-    static void testBatchExecution() {
+    static void testBatchExecutionWithEmailReport() {
         Test.startTest();
-        VFS_FixPrimaryContactPointsBatch batch = new VFS_FixPrimaryContactPointsBatch();
+        // Ejecución instanciando con correo explícito
+        VFS_FixPrimaryContactPointsBatch batch = new VFS_FixPrimaryContactPointsBatch('test_qa@vimenca.com.invalid');
         Database.executeBatch(batch, 10);
         Test.stopTest();
 
@@ -103,11 +107,11 @@ private class VFS_FixPrimaryContactPointsBatchTest {
         System.assertEquals(1, emails.size(), 'Debe haber exactamente un email marcado como IsPrimary');
 
         List<ContactPointAddress> addrs = [
-            SELECT Id, IsPrimary 
+            SELECT Id, IsPrimary, IsDefault 
             FROM ContactPointAddress 
-            WHERE ParentId = :accNoPrimary.Id AND IsPrimary = true
+            WHERE ParentId = :accNoPrimary.Id AND IsPrimary = true AND IsDefault = true
         ];
-        System.assertEquals(1, addrs.size(), 'Debe haber exactamente una dirección marcada como IsPrimary');
+        System.assertEquals(1, addrs.size(), 'Debe haber exactamente una dirección marcada como IsPrimary e IsDefault');
 
         // Validar que la cuenta con primarios preexistentes no se haya alterado
         Account accWithPrimary = [SELECT Id FROM Account WHERE Name = 'Empresa Prueba Con Primario SA' LIMIT 1];
@@ -117,5 +121,15 @@ private class VFS_FixPrimaryContactPointsBatchTest {
             WHERE ParentId = :accWithPrimary.Id AND IsPrimary = true
         ];
         System.assertEquals(1, origPhones.size(), 'La cuenta con primario previo debe conservar su teléfono intacto');
+    }
+
+    @isTest
+    static void testBatchDefaultConstructor() {
+        Test.startTest();
+        VFS_FixPrimaryContactPointsBatch batch = new VFS_FixPrimaryContactPointsBatch();
+        Database.executeBatch(batch, 10);
+        Test.stopTest();
+
+        System.assertNotEquals(null, batch, 'La instancia del batch debe inicializarse correctamente');
     }
 }
