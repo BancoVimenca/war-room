@@ -1,0 +1,6 @@
+
+# Keystone AI Governance Suite (Local only - Not to be tracked in client repositories)
+.agents/
+.cursorrules
+.vscode/keystone.code-snippets
+.keystone_mcp.json

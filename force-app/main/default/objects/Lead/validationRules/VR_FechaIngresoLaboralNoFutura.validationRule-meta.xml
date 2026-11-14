@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_FechaIngresoLaboralNoFutura</fullName>
+    <active>true</active>
+    <description>Impide que la fecha de ingreso laboral sea posterior a la fecha actual.</description>
+    <errorConditionFormula>AND(
+    NOT(ISBLANK(LEA_Fecha_de_ingreso__c)),
+    LEA_Fecha_de_ingreso__c &gt; TODAY()
+)</errorConditionFormula>
+    <errorDisplayField>LEA_Fecha_de_ingreso__c</errorDisplayField>
+    <errorMessage>La fecha de ingreso no puede ser posterior a la fecha actual.</errorMessage>
+</ValidationRule>

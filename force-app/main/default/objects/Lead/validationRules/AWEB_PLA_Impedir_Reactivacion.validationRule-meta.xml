@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>AWEB_PLA_Impedir_Reactivacion</fullName>
+    <active>true</active>
+    <description>Una aprobación pendiente no puede reactivar un candidato rechazado por falta de entrega PLA. Para una reapertura deliberada el administrador debe retirar primero la marca de rechazo.</description>
+    <errorConditionFormula>AND(LEA_Rechazo_Documentacion_PLA__c, OR(NOT(ISPICKVAL(Status, &quot;Rechazado&quot;)), NOT(ISPICKVAL(LEA_SubEstado__c, &quot;RECHAZADO&quot;)), IsConverted))</errorConditionFormula>
+    <errorMessage>El onboarding fue rechazado porque venció el plazo de entrega de documentación PLA.</errorMessage>
+</ValidationRule>

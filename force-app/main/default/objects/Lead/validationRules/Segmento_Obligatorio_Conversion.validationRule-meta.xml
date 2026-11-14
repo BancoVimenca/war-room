@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Segmento_Obligatorio_Conversion</fullName>
+    <active>true</active>
+    <errorConditionFormula>AND(
+    IsConverted,
+    ISCHANGED(IsConverted),
+    ISBLANK(TEXT(LEA_Segmento__c))
+)</errorConditionFormula>
+    <errorMessage>Debes seleccionar un Segmento antes de convertir el Lead para permitir la generación del CIF del cliente.</errorMessage>
+</ValidationRule>
