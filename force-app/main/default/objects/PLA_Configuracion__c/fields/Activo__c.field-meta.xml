@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Activo__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description>Interruptor maestro ON/OFF. Si está desactivado, ningún proceso de auditoría ni precalificación PLA se ejecutará.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Marque para habilitar el motor PLA; desmarque para pausar todos los batches automáticamente.</inlineHelpText>
+    <label>Activo (Maestro)</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>
+
