@@ -1,10 +1,11 @@
 /**
- * @description       : Servicio de validación de integridad de datos obligatorios para la precalificación PLA
+ * @description       : Servicio de validación de integridad de datos obligatorios para la precalificación PLA en FSC
  *                      Verifica la completitud del 100% de campos requeridos por el servicio MacroProcesos (MPTransactionRest)
- *                      tanto para Personas Físicas como Personas Jurídicas.
+ *                      soportando tanto la arquitectura moderna FSC (Account UI fields, FinServ__Employment__c, Datos_Maestros__c SIB)
+ *                      como los campos legados de integración (ACC_INT_...).
  * @author            : @dev-salesforce / Keystone Advisors
  * @group             : PLA Vimenca
- * @last modified on  : 2026-11-13
+ * @last modified on  : 2026-11-14
 **/
 public with sharing class VFS_PLADataIntegrityService {
 
@@ -56,7 +57,7 @@ public with sharing class VFS_PLADataIntegrityService {
     }
 
     /**
-     * @description Evalúa la completitud de una Cuenta (Persona Física o Jurídica)
+     * @description Evalúa la completitud de una Cuenta bajo la arquitectura FSC (Persona Física o Jurídica)
      */
     public static AuditResult auditAccount(
         Account acc, 
@@ -74,21 +75,26 @@ public with sharing class VFS_PLADataIntegrityService {
             return result;
         }
 
-        // 1. Identificación y Datos Generales Comunes
-        if (String.isBlank(acc.ACC_INT_Tipo_de_identificacion__c)) {
+        // 1. Identificación Común (Resolución Inteligente FSC / Trama)
+        String idType = String.isNotBlank(acc.ACC_INT_Tipo_de_identificacion__c) ? acc.ACC_INT_Tipo_de_identificacion__c : acc.ACC_TipoIdentificacion__c;
+        if (String.isBlank(idType)) {
             result.addMissingField('Tipo de Identificación');
         }
 
         Boolean isPhysical = acc.isPersonAccount || acc.ACC_Persona_Fisica__c;
 
         if (isPhysical) {
-            if (String.isBlank(acc.FinServ__IndividualId__c) && String.isBlank(acc.ACC_NumIdentificacion__c)) {
+            // Número de Identificación (Cédula / Pasaporte)
+            String idNum = String.isNotBlank(acc.ACC_NumIdentificacion__c) ? acc.ACC_NumIdentificacion__c : acc.FinServ__IndividualId__c;
+            if (String.isBlank(idNum)) {
                 result.addMissingField('Número de Identificación (Cédula/Pasaporte)');
             }
             if (acc.PersonBirthdate == null) {
                 result.addMissingField('Fecha de Nacimiento');
             }
-            if (String.isBlank(acc.ACC_INT_Nacionalidad__c)) {
+            // Nacionalidad (FSC nativo / Trama)
+            String nationality = String.isNotBlank(acc.ACC_INT_Nacionalidad__c) ? acc.ACC_INT_Nacionalidad__c : acc.ACC_Nacionalidad__c;
+            if (String.isBlank(nationality)) {
                 result.addMissingField('Nacionalidad');
             }
             if (String.isBlank(acc.ACC_Estado_Civil__c)) {
@@ -117,18 +123,22 @@ public with sharing class VFS_PLADataIntegrityService {
             }
         }
 
-        // 2. Información Financiera
-        if (infoFinanciera == null) {
-            result.addMissingField('Información Financiera (Registro)');
-        } else {
-            if (String.isBlank(infoFinanciera.INF_INT_Origen_de_los_recursos__c)) {
-                result.addMissingField('Información Financiera (Origen de los Recursos)');
-            }
+        // 2. Información Financiera (Arquitectura Nativa FSC: Account Balances o Registro Custom)
+        Boolean hasFinancialData = false;
+        if (infoFinanciera != null && String.isNotBlank(infoFinanciera.INF_INT_Origen_de_los_recursos__c)) {
+            hasFinancialData = true;
+        } else if (acc.ACC_Total_Activos__c != null || acc.ACC_Ventas_Ingresos_Anuales__c != null) {
+            hasFinancialData = true;
         }
 
-        // 3. Actividad Económica
-        if (String.isBlank(activityCode)) {
-            result.addMissingField('Actividad Económica (Industry / Datos Maestros)');
+        if (!hasFinancialData) {
+            result.addMissingField('Información Financiera (Activos, Ingresos u Origen de Recursos)');
+        }
+
+        // 3. Actividad Económica (FSC: Lookup SIB Datos_Maestros__c o Industry)
+        Boolean hasActivity = String.isNotBlank(activityCode) || acc.ACC_Actividad_Economica__c != null || String.isNotBlank(acc.Industry);
+        if (!hasActivity) {
+            result.addMissingField('Actividad Económica (Actividad SIB / Datos Maestros)');
         }
 
         // 4. Parámetros Transaccionales y Prevención
@@ -139,26 +149,36 @@ public with sharing class VFS_PLADataIntegrityService {
             result.addMissingField('Declaración Persona PEP');
         }
 
-        // 5. Validaciones Específicas Persona Física
+        // 5. Validaciones Específicas Persona Física (FSC Employment / Residencia)
         if (isPhysical) {
-            if (history == null || String.isBlank(history.FinServ__Occupation__c)) {
+            Boolean hasOccupation = (history != null && String.isNotBlank(history.FinServ__Occupation__c)) ||
+                                    String.isNotBlank(acc.ACC_Tipo_Actividad__c);
+            if (!hasOccupation) {
                 result.addMissingField('Historial Laboral / Ocupación');
             }
-            if (String.isBlank(acc.ACC_INT_Pais_Nacimiento__c)) {
+            
+            String birthCountry = String.isNotBlank(acc.ACC_INT_Pais_Nacimiento__c) ? acc.ACC_INT_Pais_Nacimiento__c : acc.ACC_Pais_Nacimiento__c;
+            if (String.isBlank(birthCountry)) {
                 result.addMissingField('País de Nacimiento');
             }
-            if (String.isBlank(acc.ACC_INT_Pais_Residencia_Legal__c)) {
+            
+            String resCountry = String.isNotBlank(acc.ACC_INT_Pais_Residencia_Legal__c) ? acc.ACC_INT_Pais_Residencia_Legal__c : acc.ACC_Pais_Residencia_Legal__c;
+            if (String.isBlank(resCountry)) {
                 result.addMissingField('País de Residencia Legal');
             }
         } else {
-            // Validaciones Específicas Persona Jurídica (Partes Relacionadas)
+            // Validaciones Específicas Persona Jurídica (Partes Relacionadas FSC)
             if (accionista == null) {
                 result.addMissingField('Accionista Principal no asignado');
             } else {
                 if (accionista.OwnershipPercentage__c == null || accionista.OwnershipPercentage__c <= 0) {
                     result.addMissingField('Porcentaje de Participación Accionaria');
                 }
-                if (accionista.FinServ__RelatedAccount__r == null || String.isBlank(accionista.FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c)) {
+                String accIdType = accionista.FinServ__RelatedAccount__r != null ? 
+                    (String.isNotBlank(accionista.FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c) ? 
+                        accionista.FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c : 
+                        accionista.FinServ__RelatedAccount__r.ACC_TipoIdentificacion__c) : null;
+                if (String.isBlank(accIdType)) {
                     result.addMissingField('Identificación del Accionista Principal');
                 }
             }
@@ -166,7 +186,11 @@ public with sharing class VFS_PLADataIntegrityService {
             if (repLegal == null) {
                 result.addMissingField('Representante Legal no asignado');
             } else {
-                if (repLegal.FinServ__RelatedAccount__r == null || String.isBlank(repLegal.FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c)) {
+                String repIdType = repLegal.FinServ__RelatedAccount__r != null ? 
+                    (String.isNotBlank(repLegal.FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c) ? 
+                        repLegal.FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c : 
+                        repLegal.FinServ__RelatedAccount__r.ACC_TipoIdentificacion__c) : null;
+                if (String.isBlank(repIdType)) {
                     result.addMissingField('Identificación del Representante Legal');
                 }
             }

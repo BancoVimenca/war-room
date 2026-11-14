@@ -1,11 +1,11 @@
 /**
- * @description       : Batch de Auditoría de Campos Obligatorios y Gestión de Notificaciones (Componente 1)
+ * @description       : Batch de Auditoría de Campos Obligatorios y Gestión de Notificaciones (Componente 1 - SOL-0197 / BVWAR-292)
  *                      - Para clientes con ejecutivo: Despacha correo individual con viñetas de faltantes y link directo.
  *                      - Para clientes en los 10 usuarios de sucursales: Agrupa casos y envía un CSV/HTML consolidado
  *                        al Encargado General de Sucursales (Laura Reynoso: lreynoso@bv.com.do en QA).
  * @author            : @dev-salesforce / Keystone Advisors
  * @group             : PLA Vimenca
- * @last modified on  : 2026-11-13
+ * @last modified on  : 2026-11-14
 **/
 public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObject>, Database.Stateful {
 
@@ -54,12 +54,13 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         return Database.getQueryLocator([
             SELECT Id, Name, FirstName, MiddleName, LastName, Suffix,
                    isPersonAccount, ACC_Persona_Fisica__c, ACC_INT_TipoPersona__c,
-                   ACC_INT_Tipo_de_identificacion__c, ACC_NumIdentificacion__c, FinServ__IndividualId__c,
+                   ACC_TipoIdentificacion__c, ACC_INT_Tipo_de_identificacion__c, ACC_NumIdentificacion__c, FinServ__IndividualId__c,
                    PersonBirthdate, ACC_Fecha_Fundacion__c, ACC_Nacionalidad__c, ACC_INT_Nacionalidad__c,
                    ACC_Estado_Civil__c, PersonEmail, ACC_Correo_Electronico_Cliente__c, PersonMobilePhone, Phone,
                    ACC_RNC__c, ACC_Nombre_Corto_Comercial__c, ACC_INT_Tipo_Estructura_Juridica__c,
                    ACC_Rango_de_Transacciones_estimadas__c, ACC_Persona_PEP__c,
-                   ACC_INT_Pais_Nacimiento__c, ACC_INT_Pais_Residencia_Legal__c,
+                   ACC_Pais_Nacimiento__c, ACC_INT_Pais_Nacimiento__c, ACC_Pais_Residencia_Legal__c, ACC_INT_Pais_Residencia_Legal__c,
+                   ACC_Total_Activos__c, ACC_Ventas_Ingresos_Anuales__c, ACC_Actividad_Economica__c, ACC_Tipo_Actividad__c,
                    Industry, OwnerId, Owner.Name, Owner.Email, Owner.IsActive, Owner.Alias
             FROM Account
             WHERE ACC_Estado__c = 'ACTIVO'
@@ -104,12 +105,16 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
                     // Si el campo Industry contiene un texto libre o picklist en vez de Id
                 }
             }
+            if (a.ACC_Actividad_Economica__c != null) {
+                industryIds.add(a.ACC_Actividad_Economica__c);
+            }
         }
 
         Map<Id, String> activityCodeMap = new Map<Id, String>();
         if (!industryIds.isEmpty()) {
-            for (Datos_Maestros__c dm : [SELECT Id, DM_Direccion__c FROM Datos_Maestros__c WHERE Id IN :industryIds]) {
-                activityCodeMap.put(dm.Id, dm.DM_Direccion__c);
+            for (Datos_Maestros__c dm : [SELECT Id, DM_Direccion__c, DM_Codigo__c FROM Datos_Maestros__c WHERE Id IN :industryIds]) {
+                String code = String.isNotBlank(dm.DM_Direccion__c) ? dm.DM_Direccion__c : dm.DM_Codigo__c;
+                activityCodeMap.put(dm.Id, code);
             }
         }
 
@@ -138,7 +143,9 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
             SELECT Id, FinServ__FinancialAccount__r.FinServ__PrimaryOwner__c,
                    OwnershipPercentage__c, FinServ__Role__c,
                    FinServ__RelatedAccount__r.ACC_INT_Tipo_de_identificacion__c,
-                   FinServ__RelatedAccount__r.ACC_INT_Nacionalidad__c
+                   FinServ__RelatedAccount__r.ACC_TipoIdentificacion__c,
+                   FinServ__RelatedAccount__r.ACC_INT_Nacionalidad__c,
+                   FinServ__RelatedAccount__r.ACC_Nacionalidad__c
             FROM FinServ__FinancialAccountRole__c 
             WHERE FinServ__FinancialAccount__r.FinServ__PrimaryOwner__c IN :accountIds
         ]) {
@@ -158,11 +165,14 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
 
         for (Account acc : scope) {
             String actCode = null;
-            if (String.isNotBlank(acc.Industry)) {
+            if (acc.ACC_Actividad_Economica__c != null && activityCodeMap.containsKey(acc.ACC_Actividad_Economica__c)) {
+                actCode = activityCodeMap.get(acc.ACC_Actividad_Economica__c);
+            } else if (String.isNotBlank(acc.Industry)) {
                 try {
                     actCode = activityCodeMap.get((Id)acc.Industry);
                 } catch (Exception e) {}
             }
+
             Informacion_Financiera__c inf = infoFinancieraMap.get(acc.Id);
             FinServ__Employment__c emp = employmentMap.get(acc.Id);
             FinServ__FinancialAccountRole__c accRole = accionistaMap.get(acc.Id);
@@ -193,6 +203,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
                     idNumber = String.isNotBlank(acc.ACC_RNC__c) ? acc.ACC_RNC__c : '';
                 }
 
+                String effectiveIdType = String.isNotBlank(acc.ACC_TipoIdentificacion__c) ? acc.ACC_TipoIdentificacion__c : acc.ACC_INT_Tipo_de_identificacion__c;
                 String fullLink = baseUrl + '/' + acc.Id;
 
                 if (isBranchUser) {
@@ -202,7 +213,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
                     bCase.branchName = acc.Owner.Name;
                     bCase.clientName = acc.Name;
                     bCase.personType = acc.isPersonAccount ? 'Física' : 'Jurídica';
-                    bCase.idType = String.isNotBlank(acc.ACC_INT_Tipo_de_identificacion__c) ? acc.ACC_INT_Tipo_de_identificacion__c : 'N/D';
+                    bCase.idType = String.isNotBlank(effectiveIdType) ? effectiveIdType : 'N/D';
                     bCase.idNumber = String.isNotBlank(idNumber) ? idNumber : 'Sin Identificación';
                     bCase.missingFieldsPLA = audit.missingFieldsSummary;
                     bCase.contactWarnings = audit.contactWarningsSummary;
@@ -243,7 +254,9 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         mail.setToAddresses(new List<String>{ acc.Owner.Email });
         mail.setSubject('⚠️ [PLA Vimenca] Regularización de Datos Requerida - ' + acc.Name);
 
-        String idNum = acc.isPersonAccount ? acc.FinServ__IndividualId__c : acc.ACC_RNC__c;
+        String idNum = acc.isPersonAccount ? 
+            (String.isNotBlank(acc.ACC_NumIdentificacion__c) ? acc.ACC_NumIdentificacion__c : acc.FinServ__IndividualId__c) : 
+            acc.ACC_RNC__c;
         String htmlBody = '<div style="font-family: Arial, sans-serif; color: #333333; line-height: 1.5;">' +
             '<h2 style="color: #003366;">Aviso de Datos Pendientes para Precalificación PLA</h2>' +
             '<p>Estimado(a) <b>' + acc.Owner.Name + '</b>,</p>' +
@@ -297,7 +310,7 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
             '<p>Estimada Encargada General de Sucursales <b>(Laura Reynoso)</b>,</p>' +
             '<p>Se adjunta el reporte detallado con los <b>' + this.branchCases.size() + '</b> clientes radicados en usuarios virtuales de agencia que requieren actualización de datos obligatorios.</p>' +
             '<p>Puede abrir el archivo CSV adjunto para filtrar por sucursal y distribuir las listas operativas a cada oficina.</p>' +
-            '<p style="font-size: 11px; color: #7f8c8d;">Generado automáticamente por el motor nocturno de integridad de datos PLA - Banco Vimenca.</p>' +
+            '<p style="font-size: 11px; color: #7f8c8d;">Generado automáticamente por el motor nocturno de integridad de datos PLA - Banco Vimenca FSC.</p>' +
             '</div>';
 
         mail.setHtmlBody(htmlBody);
