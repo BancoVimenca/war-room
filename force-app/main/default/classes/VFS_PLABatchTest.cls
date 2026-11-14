@@ -158,10 +158,12 @@ private class VFS_PLABatchTest {
 
         // Forzar caso de branch en la lista
         VFS_PLAAuditBatch.BranchIncompleteCase bCase = new VFS_PLAAuditBatch.BranchIncompleteCase();
+        bCase.branchCode = 'BPRIN001';
         bCase.branchName = 'Sucursal Principal';
         bCase.clientName = 'Cliente Sucursal';
-        bCase.identificationNumber = '00100000000';
         bCase.personType = 'Física';
+        bCase.idType = 'Cédula';
+        bCase.idNumber = '00100000000';
         bCase.missingFields = 'Teléfono, Correo';
         bCase.recordUrl = 'https://vimenca.salesforce.com/001';
         batch.branchCases.add(bCase);

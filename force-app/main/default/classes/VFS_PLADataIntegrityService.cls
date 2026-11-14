@@ -59,7 +59,9 @@ public with sharing class VFS_PLADataIntegrityService {
             result.addMissingField('Tipo de Identificación');
         }
 
-        if (acc.isPersonAccount) {
+        Boolean isPhysical = acc.isPersonAccount || acc.ACC_Persona_Fisica__c;
+
+        if (isPhysical) {
             if (String.isBlank(acc.FinServ__IndividualId__c) && String.isBlank(acc.ACC_NumIdentificacion__c)) {
                 result.addMissingField('Número de Identificación (Cédula/Pasaporte)');
             }
@@ -96,16 +98,16 @@ public with sharing class VFS_PLADataIntegrityService {
 
         // 2. Información Financiera
         if (infoFinanciera == null) {
-            result.addMissingField('Información Financiera no registrada');
+            result.addMissingField('Información Financiera (Registro)');
         } else {
             if (String.isBlank(infoFinanciera.INF_INT_Origen_de_los_recursos__c)) {
-                result.addMissingField('Origen de los Recursos (Info Financiera)');
+                result.addMissingField('Información Financiera (Origen de los Recursos)');
             }
         }
 
         // 3. Actividad Económica
         if (String.isBlank(activityCode)) {
-            result.addMissingField('Actividad Económica (Código de Datos Maestros)');
+            result.addMissingField('Actividad Económica (Industry / Datos Maestros)');
         }
 
         // 4. Parámetros Transaccionales y Prevención
@@ -117,7 +119,7 @@ public with sharing class VFS_PLADataIntegrityService {
         }
 
         // 5. Validaciones Específicas Persona Física
-        if (acc.ACC_Persona_Fisica__c) {
+        if (isPhysical) {
             if (history == null || String.isBlank(history.FinServ__Occupation__c)) {
                 result.addMissingField('Historial Laboral / Ocupación');
             }

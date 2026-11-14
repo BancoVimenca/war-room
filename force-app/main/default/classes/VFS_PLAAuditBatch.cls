@@ -20,10 +20,12 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
     private List<String> branchManagerEmails;
 
     public class BranchIncompleteCase {
+        public String branchCode { get; set; }
         public String branchName { get; set; }
         public String clientName { get; set; }
-        public String identificationNumber { get; set; }
         public String personType { get; set; }
+        public String idType { get; set; }
+        public String idNumber { get; set; }
         public String missingFields { get; set; }
         public String recordUrl { get; set; }
     }
@@ -67,6 +69,18 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
 
     public void execute(Database.BatchableContext bc, List<Account> scope) {
         this.totalEvaluated += scope.size();
+
+        // 0. Auto-reparación preventiva: Garantizar que Cuentas Personales tengan ACC_Persona_Fisica__c = true
+        List<Account> accountsToFix = new List<Account>();
+        for (Account a : scope) {
+            if (a.isPersonAccount && !a.ACC_Persona_Fisica__c) {
+                accountsToFix.add(new Account(Id = a.Id, ACC_Persona_Fisica__c = true));
+                a.ACC_Persona_Fisica__c = true; // Sincroniza en memoria para la auditoría actual
+            }
+        }
+        if (!accountsToFix.isEmpty()) {
+            Database.update(accountsToFix, false);
+        }
 
         Set<Id> accountIds = new Map<Id, Account>(scope).keySet();
         Set<Id> industryIds = new Set<Id>();
@@ -158,16 +172,28 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
                     isBranchUser = true;
                 }
 
-                String idNumber = acc.isPersonAccount ? acc.FinServ__IndividualId__c : acc.ACC_RNC__c;
+                String idNumber = '';
+                if (acc.isPersonAccount) {
+                    if (String.isNotBlank(acc.ACC_NumIdentificacion__c)) {
+                        idNumber = acc.ACC_NumIdentificacion__c;
+                    } else if (String.isNotBlank(acc.FinServ__IndividualId__c)) {
+                        idNumber = acc.FinServ__IndividualId__c;
+                    }
+                } else {
+                    idNumber = String.isNotBlank(acc.ACC_RNC__c) ? acc.ACC_RNC__c : '';
+                }
+
                 String fullLink = baseUrl + '/' + acc.Id;
 
                 if (isBranchUser) {
                     this.totalIncompleteBranch++;
                     BranchIncompleteCase bCase = new BranchIncompleteCase();
+                    bCase.branchCode = String.isNotBlank(acc.Owner.Alias) ? acc.Owner.Alias : 'N/D';
                     bCase.branchName = acc.Owner.Name;
                     bCase.clientName = acc.Name;
-                    bCase.identificationNumber = String.isNotBlank(idNumber) ? idNumber : 'Sin Identificación';
-                    bCase.personType = acc.ACC_Persona_Fisica__c ? 'Física' : 'Jurídica';
+                    bCase.personType = acc.isPersonAccount ? 'Física' : 'Jurídica';
+                    bCase.idType = String.isNotBlank(acc.ACC_INT_Tipo_de_identificacion__c) ? acc.ACC_INT_Tipo_de_identificacion__c : 'N/D';
+                    bCase.idNumber = String.isNotBlank(idNumber) ? idNumber : 'Sin Identificación';
                     bCase.missingFields = audit.missingFieldsSummary;
                     bCase.recordUrl = fullLink;
                     this.branchCases.add(bCase);
@@ -236,11 +262,16 @@ public with sharing class VFS_PLAAuditBatch implements Database.Batchable<sObjec
         mail.setToAddresses(this.branchManagerEmails);
         mail.setSubject('📊 [PLA Vimenca] Informe Consolidado de Sucursales - Clientes con Datos Incompletos');
 
-        String csvContent = 'Codigo_Sucursal,Nombre_Sucursal,Identificacion,Nombre_Cliente,Tipo_Persona,Campos_Faltantes,Enlace_Salesforce\n';
+        String csvContent = 'Codigo_Sucursal,Nombre_Sucursal,Nombre_Cliente,Tipo_Persona,Tipo_Identificacion,Numero_Identificacion_o_RNC,Campos_Faltantes,Enlace_Salesforce\n';
         for (BranchIncompleteCase c : this.branchCases) {
-            csvContent += '"' + c.branchName + '","' + c.branchName + '","' + c.identificationNumber + '","' + 
-                          c.clientName.replace('"', '""') + '","' + c.personType + '","' + 
-                          c.missingFields.replace('"', '""') + '","' + c.recordUrl + '"\n';
+            csvContent += '"' + c.branchCode + '","' + 
+                          c.branchName + '","' + 
+                          c.clientName.replace('"', '""') + '","' + 
+                          c.personType + '","' + 
+                          c.idType + '","' + 
+                          c.idNumber + '","' + 
+                          c.missingFields.replace('"', '""') + '","' + 
+                          c.recordUrl + '"\n';
         }
 
         Messaging.EmailFileAttachment attachment = new Messaging.EmailFileAttachment();
