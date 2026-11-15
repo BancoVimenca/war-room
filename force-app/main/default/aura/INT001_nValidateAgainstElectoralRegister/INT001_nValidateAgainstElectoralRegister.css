@@ -1,0 +1,8 @@
+.THIS .scontainer {
+    position: relative !important;
+    height:5rem;
+}
+
+.THIS.content-center {
+    text-align:center !important;
+}
