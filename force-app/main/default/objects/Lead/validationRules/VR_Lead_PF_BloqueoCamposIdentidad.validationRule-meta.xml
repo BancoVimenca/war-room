@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_Lead_PF_BloqueoCamposIdentidad</fullName>
+    <active>true</active>
+    <description>Impide modificar el Tipo de Identificación, Número de Identificación y Nombres si la identidad ya fue validada con éxito mediante el Padrón Electoral o autorizada por Tecnología.</description>
+    <errorConditionFormula>AND(
+    NOT(ISPICKVAL(LEA_TipoIdentificacion__c, &apos;Pasaporte&apos;)),
+    OR(
+        RecordType.DeveloperName = &apos;Candidato_Persona_Natural&apos;,
+        RecordType.DeveloperName = &apos;Candidato_Persona_Fisica&apos;
+    ),
+    OR(
+        PRIORVALUE(LEA_Validacion_Identidad_Completada__c) = true,
+        ISPICKVAL(PRIORVALUE(LEA_Estado_Aprobacion_Tecnologia__c), &apos;Aprobado&apos;)
+    ),
+    OR(
+        ISCHANGED(LEA_TipoIdentificacion__c),
+        ISCHANGED(LEA_NumIdentificacion__c),
+        ISCHANGED(FirstName),
+        ISCHANGED(LastName),
+        ISCHANGED(MiddleName)
+    )
+)</errorConditionFormula>
+    <errorMessage>La identidad de este candidato ya ha sido validada oficialmente (Padrón Electoral / Tecnología). No está permitida la modificación del tipo de identificación, número de identificación ni nombres.</errorMessage>
+</ValidationRule>

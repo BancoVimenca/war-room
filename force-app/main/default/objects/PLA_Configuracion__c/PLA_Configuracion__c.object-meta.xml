@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomObject xmlns="http://soap.sforce.com/2006/04/metadata">
+    <customSettingsType>Hierarchy</customSettingsType>
+    <description>Configuración y conmutador maestro ON/OFF para el Motor Nocturno de Auditoría y Precalificación de Riesgo PLA</description>
+    <enableFeeds>false</enableFeeds>
+    <label>Configuración Motor PLA</label>
+    <visibility>Public</visibility>
+</CustomObject>
+

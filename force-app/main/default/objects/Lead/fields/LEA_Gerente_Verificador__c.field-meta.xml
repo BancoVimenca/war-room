@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LEA_Gerente_Verificador__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Gerente seleccionado manualmente.</description>
+    <inlineHelpText>Seleccione el Gerente Verificador</inlineHelpText>
+    <label>Gerente Verificador</label>
+    <referenceTo>User</referenceTo>
+    <relationshipName>Prospectos</relationshipName>
+    <required>false</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Lookup</type>
+</CustomField>

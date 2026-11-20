@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Auditoria_Activa__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description>Habilita o deshabilita individualmente el batch de auditoría de datos y generación de reportes CSV.</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Marque para permitir la auditoría de datos y envíos de correo; desmarque para pausarlo.</inlineHelpText>
+    <label>Auditoría Activa</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>
+

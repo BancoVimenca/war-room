@@ -1,0 +1,50 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ApprovalProcess xmlns="http://soap.sforce.com/2006/04/metadata">
+    <active>false</active>
+    <allowRecall>false</allowRecall>
+    <allowedSubmitters>
+        <type>owner</type>
+    </allowedSubmitters>
+    <approvalPageFields>
+        <field>Name</field>
+        <field>ACC_RNC__c</field>
+        <field>Owner</field>
+    </approvalPageFields>
+    <approvalStep>
+        <allowDelegate>false</allowDelegate>
+        <assignedApprover>
+            <approver>
+                <name>amejia@bv.com.do</name>
+                <type>user</type>
+            </approver>
+            <approver>
+                <name>aypena@bv.com.do.prd</name>
+                <type>user</type>
+            </approver>
+            <approver>
+                <name>dapena@bv.com.do</name>
+                <type>user</type>
+            </approver>
+            <approver>
+                <name>dcastillo@bv.com.do</name>
+                <type>user</type>
+            </approver>
+            <whenMultipleApprovers>FirstResponse</whenMultipleApprovers>
+        </assignedApprover>
+        <label>Paso 1</label>
+        <name>Paso_1</name>
+    </approvalStep>
+    <enableMobileDeviceAccess>false</enableMobileDeviceAccess>
+    <entryCriteria>
+        <formula>AND (
+				Doc_legal_no_aprobada__c &lt;&gt; 0,
+				ISPICKVAL(ACC_Estado__c, &apos;Validado&apos;)
+				)</formula>
+    </entryCriteria>
+    <finalApprovalRecordLock>true</finalApprovalRecordLock>
+    <finalRejectionRecordLock>false</finalRejectionRecordLock>
+    <label>Aprobación Legal</label>
+    <processOrder>1</processOrder>
+    <recordEditability>AdminOnly</recordEditability>
+    <showApprovalHistory>true</showApprovalHistory>
+</ApprovalProcess>

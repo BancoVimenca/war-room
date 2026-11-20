@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LEA_Validacion_Identidad_Completada__c</fullName>
+    <defaultValue>false</defaultValue>
+    <description>Indica si la identidad del candidato fue validada exitosamente mediante el Padrón Electoral (Persona Física) o DGII/RNC (Persona Jurídica), o bien autorizada por Tecnología.</description>
+    <label>Validación Identidad Completada</label>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Checkbox</type>
+</CustomField>

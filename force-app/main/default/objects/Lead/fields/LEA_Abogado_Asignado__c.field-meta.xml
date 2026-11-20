@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LEA_Abogado_Asignado__c</fullName>
+    <deleteConstraint>SetNull</deleteConstraint>
+    <description>Abogado o analista legal asignado para la revisión y dictamen formal del prospecto.</description>
+    <label>Abogado Asignado</label>
+    <referenceTo>User</referenceTo>
+    <relationshipName>Leads_Asignados_Legal</relationshipName>
+    <required>false</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Lookup</type>
+</CustomField>
