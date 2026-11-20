@@ -1,0 +1,60 @@
+name: 🚀 Keystone CI/CD & Quality Gates Pipeline
+
+on:
+  push:
+    branches: [ develop, qa ]
+  pull_request:
+    branches: [ develop, qa, main ]
+
+jobs:
+  quality-gates:
+    name: 🧪 Quality Gates & Gobernanza
+    runs-on: ubuntu-latest
+    steps:
+      - name: 📥 Clonar Repositorio
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 10
+
+      - name: 📦 Validar Proyecto Salesforce DX (sfdx-project.json)
+        run: |
+          python3 -c "
+          import json, os
+          assert os.path.exists('sfdx-project.json'), 'Falta sfdx-project.json'
+          cfg = json.load(open('sfdx-project.json'))
+          assert 'packageDirectories' in cfg, 'sfdx-project.json inválido'
+          print('✅ sfdx-project.json válido:', cfg.get('name', 'war-room'))
+          "
+
+      - name: 🛡️ Validación Sintáctica de Metadatos XML y Manifiestos
+        run: |
+          python3 -c "
+          import xml.etree.ElementTree as ET, pathlib, sys
+          xml_files = list(pathlib.Path('force-app').rglob('*.xml')) + list(pathlib.Path('manifest').rglob('*.xml')) if pathlib.Path('manifest').exists() else list(pathlib.Path('force-app').rglob('*.xml'))
+          errors = []
+          for f in xml_files:
+              try:
+                  ET.parse(f)
+              except Exception as e:
+                  errors.append(f'{f}: {e}')
+          if errors:
+              print('❌ Errores XML detectados:\n' + '\n'.join(errors))
+              sys.exit(1)
+          print(f'✅ {len(xml_files)} archivos XML de metadatos/manifiestos validados sin errores.')
+          "
+
+      - name: 🔢 Verificación de Trazabilidad Institucional (SOL-XXXX / BVWAR)
+        run: |
+          echo "🔍 Verificando historial reciente de commits..."
+          git log -n 5 --oneline
+          if git log -n 10 --pretty=%B | grep -Eq "SOL-[0-9]+|BVWAR-[0-9]+"; then
+            echo "✅ Trazabilidad institucional validada en commits."
+          else
+            echo "❌ ERROR: No se encontró referencia SOL-XXXX o BVWAR-XXXX en commits recientes."
+            exit 1
+          fi
+
+      - name: 🌐 Verificación de Conectividad Keystone Gateway
+        run: |
+          curl -sI https://gateway.keystoneadvisors.cl/ | head -n 1 || true
+          echo "✅ Quality Gates completados."
