@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomLabels xmlns="http://soap.sforce.com/2006/04/metadata">
+    <labels>
+        <fullName>BlacklistApiKey</fullName>
+        <categories>Integration</categories>
+        <language>es</language>
+        <protected>false</protected>
+        <shortDescription>BlacklistApiKey</shortDescription>
+        <value>ws-epayit-blacklist-2026-rq7EEb&amp;ir#Ey</value>
+    </labels>
+    <labels>
+        <fullName>EndpointBlacklistRest</fullName>
+        <categories>Integration</categories>
+        <language>es</language>
+        <protected>false</protected>
+        <shortDescription>EndpointBlacklistRest</shortDescription>
+        <value>http://179.51.77.198:8001/api/v1/blacklist/check</value>
+    </labels>
+</CustomLabels>

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>INT003_FSC</members>
+        <members>INT003_FSC_Test</members>
+        <members>INT003_LEAD_FSC</members>
+        <members>INT003_LEAD_FSC_Test</members>
+        <members>INT003_LEAD_FSC_TestMock</members>
+        <name>ApexClass</name>
+    </types>
+    <version>60.0</version>
+</Package>

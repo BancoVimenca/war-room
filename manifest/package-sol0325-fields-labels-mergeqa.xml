@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>Account.ACC_Cumplo360_Relevancia__c</members>
+        <members>Lead.LEA_Cumplo360_Relevancia__c</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>EndpointBlacklistRest</members>
+        <name>RemoteSiteSetting</name>
+    </types>
+    <types>
+        <members>BlacklistApiKey</members>
+        <members>EndpointBlacklistRest</members>
+        <name>CustomLabel</name>
+    </types>
+    <version>60.0</version>
+</Package>
