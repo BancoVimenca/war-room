@@ -1,0 +1,45 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>LEA_Area_Responsable__c</fullName>
+    <description>Indica el área o bandeja responsable actual del prospecto para el seguimiento del equipo de Negocios.</description>
+    <label>Área Responsable</label>
+    <required>false</required>
+    <trackFeedHistory>false</trackFeedHistory>
+    <type>Picklist</type>
+    <valueSet>
+        <restricted>true</restricted>
+        <valueSetDefinition>
+            <sorted>false</sorted>
+            <value>
+                <fullName>Negocios</fullName>
+                <default>true</default>
+                <label>Negocios</label>
+            </value>
+            <value>
+                <fullName>Bandeja Tecnologia</fullName>
+                <default>false</default>
+                <label>Bandeja Tecnologia</label>
+            </value>
+            <value>
+                <fullName>Bandeja PLA / Cumplimiento</fullName>
+                <default>false</default>
+                <label>Bandeja PLA / Cumplimiento</label>
+            </value>
+            <value>
+                <fullName>Bandeja Validación Legal</fullName>
+                <default>false</default>
+                <label>Bandeja Validación Legal</label>
+            </value>
+            <value>
+                <fullName>Aprobado PLA-Legal / Revise completitud de datos antes de convertir</fullName>
+                <default>false</default>
+                <label>Aprobado PLA-Legal / Revise completitud de datos antes de convertir</label>
+            </value>
+            <value>
+                <fullName>Aprobado / Listo para Conversión</fullName>
+                <default>false</default>
+                <label>Aprobado / Listo para Conversión</label>
+            </value>
+        </valueSetDefinition>
+    </valueSet>
+</CustomField>

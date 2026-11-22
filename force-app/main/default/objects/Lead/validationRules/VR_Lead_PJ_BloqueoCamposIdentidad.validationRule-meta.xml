@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_Lead_PJ_BloqueoCamposIdentidad</fullName>
+    <active>true</active>
+    <description>Impide modificar el Tipo de Identificación, RNC y Nombre Comercial si la empresa ya fue validada con éxito mediante la DGII o autorizada por Tecnología.</description>
+    <errorConditionFormula>AND(
+    RecordType.DeveloperName = &apos;Candidato_Persona_Juridica&apos;,
+    OR(
+        PRIORVALUE(LEA_Validacion_Identidad_Completada__c) = true,
+        ISPICKVAL(PRIORVALUE(LEA_Estado_Aprobacion_Tecnologia__c), &apos;Aprobado&apos;)
+    ),
+    OR(
+        ISCHANGED(LEA_TipoIdentificacion__c),
+        ISCHANGED(LEA_RNC__c),
+        ISCHANGED(LEA_Nombre_Corto_Comercial__c)
+    )
+)</errorConditionFormula>
+    <errorMessage>Los datos corporativos de este candidato ya han sido validados oficialmente (DGII / Tecnología). No está permitida la modificación del tipo de identificación, RNC ni nombre comercial.</errorMessage>
+</ValidationRule>

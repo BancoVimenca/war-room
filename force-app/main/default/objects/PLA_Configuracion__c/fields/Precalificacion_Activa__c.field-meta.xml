@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Precalificacion_Activa__c</fullName>
+    <defaultValue>true</defaultValue>
+    <description>Habilita o deshabilita individualmente las llamadas al servicio MacroProcesos (Precalificación masiva).</description>
+    <externalId>false</externalId>
+    <inlineHelpText>Marque para permitir llamadas asíncronas de precalificación; desmarque si MacroProcesos está en mantenimiento.</inlineHelpText>
+    <label>Precalificación Activa</label>
+    <trackTrending>false</trackTrending>
+    <type>Checkbox</type>
+</CustomField>
+

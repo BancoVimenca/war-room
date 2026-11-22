@@ -1,0 +1,79 @@
+<aura:component implements="flexipage:availableForRecordHome,force:hasRecordId,force:lightningQuickActionWithoutHeader" access="global" controller="INT001_LEAD_VAER_Controller_FSC">
+    <aura:attribute name="isLoading" type="Boolean" default="true" />
+    <aura:attribute name="recordId" type="String" default="" />
+    <aura:attribute name="updateResponse" type="Object" />
+    <aura:handler name="init" value="{!this}" action="{!c.onInit}"/>
+    
+    <!-- override default modal css -->
+    <aura:html tag="style">
+        .cuf-content {
+        padding: 0 0rem !important;
+        }
+        .slds-p-around--medium {
+        padding: 0rem !important;
+        }      
+        
+        .bodyWrapper {
+        left: 0px !important;
+        }
+        
+        .slds-modal__content{
+        overflow-y:hidden !important;
+        height:unset !important;
+        max-height:unset !important;
+        }
+    </aura:html>
+    <!-- END -->
+    
+    <header class="slds-modal__header">
+        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Close">
+            
+            <span class="slds-assistive-text">Close</span>
+        </button>
+        <h2 id="modal-heading-01" class="slds-modal__title slds-hyphenate">Calificar prospecto</h2>
+    </header>
+    <div class="slds-modal__content slds-p-around_medium content-center" id="modal-content-id-1">
+        <aura:if isTrue="{! v.isLoading }">
+        	<div class="scontainer">
+                <div role="status" class="slds-spinner slds-spinner_medium slds-spinner_brand">
+                  <span class="slds-assistive-text">Loading</span>
+                  <div class="slds-spinner__dot-a"></div>
+                  <div class="slds-spinner__dot-b"></div>
+                </div>
+              </div>
+        <aura:set attribute="else">
+            <aura:if isTrue="{! v.updateResponse.httpRequestStatusCode != 200 }">
+                <lightning:icon iconName="action:close" size="large" alternativeText="Rejected" />
+                <p> Http Status Code {! v.updateResponse.httpRequestStatusCode }.</p>
+				<aura:set attribute="else">
+                    <aura:if isTrue="{! v.updateResponse.errorCode != '000' }">
+                        <lightning:icon iconName="action:close" size="large" alternativeText="Rejected" />
+                		<p> Código de error del proceso {! v.updateResponse.errorCode }.</p>
+                        <p>{! v.updateResponse.errorText }</p>
+                        <aura:set attribute="else">
+                            <aura:if isTrue="{! not(v.updateResponse.updateSuccess) }">
+                                <lightning:icon iconName="action:close" size="large" alternativeText="Rejected" />
+                                <p>{! v.updateResponse.updateErrorMessage }.</p>
+                                <aura:set attribute="else">
+                                    <aura:if isTrue="{! v.updateResponse.skipPep }">
+                                        <lightning:icon iconName="utility:info" size="large" alternativeText="Información" />
+                                        <p>Los candidatos con pasaporte no requieren validación en el padrón electoral.</p>
+                                        <p>Por favor continúe con el ingreso y validación de datos en Negocios.</p>
+                                        <aura:set attribute="else">
+                                            <lightning:icon iconName="action:approval" size="large" alternativeText="Approved" />
+                                            <p>El registro ha sido actualizado con éxito.</p>
+                                        </aura:set>
+                                    </aura:if>
+                                </aura:set>
+                            </aura:if>
+                        </aura:set>
+                    </aura:if>
+                </aura:set>
+            </aura:if>
+        </aura:set>
+        </aura:if>
+    </div>
+    <footer class="slds-modal__footer">
+        
+    </footer>
+</aura:component>

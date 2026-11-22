@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_Direccion_Estandar_Valida</fullName>
+    <active>true</active>
+    <description>Impide guardar valores evidentemente ilógicos o de prueba en los campos de la dirección estándar del candidato cuando la dirección es creada o modificada.</description>
+    <errorConditionFormula>AND(
+    OR(
+        ISNEW(),
+        ISCHANGED(Street),
+        ISCHANGED(City),
+        ISCHANGED(State),
+        ISCHANGED(PostalCode),
+        ISCHANGED(Country)
+    ),
+    OR(
+        AND(
+            NOT(ISBLANK(Street)),
+            OR(
+                LEN(TRIM(Street)) &lt; 5,
+                REGEX(TRIM(Street), &quot;(?i)^(x+|test|prueba|asdf|qwerty|n/?a|ninguno|null|sin direccion)$&quot;),
+                REGEX(TRIM(Street), &quot;^(.)\\1{2,}$&quot;),
+                REGEX(TRIM(Street), &quot;^[^A-Za-z0-9ÁÉÍÓÚÜÑáéíóúüñ]+$&quot;)
+            )
+        ),
+        AND(
+            NOT(ISBLANK(City)),
+            OR(
+                LEN(TRIM(City)) &lt; 3,
+                REGEX(TRIM(City), &quot;(?i)^(x+|test|prueba|asdf|qwerty|n/?a|ninguno|null)$&quot;),
+                REGEX(TRIM(City), &quot;^(.)\\1{2,}$&quot;),
+                REGEX(TRIM(City), &quot;^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$&quot;)
+            )
+        ),
+        AND(
+            NOT(ISBLANK(State)),
+            OR(
+                LEN(TRIM(State)) &lt; 3,
+                REGEX(TRIM(State), &quot;(?i)^(x+|test|prueba|asdf|qwerty|n/?a|ninguno|null)$&quot;),
+                REGEX(TRIM(State), &quot;^(.)\\1{2,}$&quot;),
+                REGEX(TRIM(State), &quot;^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$&quot;)
+            )
+        ),
+        AND(
+            NOT(ISBLANK(PostalCode)),
+            OR(
+                LEN(TRIM(PostalCode)) &lt; 3,
+                REGEX(TRIM(PostalCode), &quot;(?i)^(x+|test|prueba|asdf|qwerty|n/?a|ninguno|null)$&quot;),
+                REGEX(TRIM(PostalCode), &quot;^(.)\\1{2,}$&quot;),
+                REGEX(TRIM(PostalCode), &quot;^[^A-Za-z0-9]+$&quot;)
+            )
+        ),
+        AND(
+            NOT(ISBLANK(Country)),
+            OR(
+                LEN(TRIM(Country)) &lt; 3,
+                REGEX(TRIM(Country), &quot;(?i)^(x+|test|prueba|asdf|qwerty|n/?a|ninguno|null)$&quot;),
+                REGEX(TRIM(Country), &quot;^(.)\\1{2,}$&quot;),
+                REGEX(TRIM(Country), &quot;^[^A-Za-zÁÉÍÓÚÜÑáéíóúüñ ]+$&quot;)
+            )
+        )
+    )
+)</errorConditionFormula>
+    <errorMessage>La dirección contiene información no válida. Revise la calle, ciudad, estado o provincia, código postal y país; no utilice valores de prueba ni caracteres repetidos.</errorMessage>
+</ValidationRule>

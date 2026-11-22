@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ListView xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Prospectos_Personas_Fisica</fullName>
+    <columns>CORE.USERS.ALIAS</columns>
+    <columns>FULL_NAME</columns>
+    <columns>LEAD.CREATED_DATE</columns>
+    <columns>LEAD.EMAIL</columns>
+    <columns>LEAD.STATUS</columns>
+    <filterScope>Everything</filterScope>
+    <filters>
+        <field>LEA_TipoIdentificacion__c</field>
+        <operation>notEqual</operation>
+        <value>RNC</value>
+    </filters>
+    <label>Prospectos Personas Fisica</label>
+</ListView>

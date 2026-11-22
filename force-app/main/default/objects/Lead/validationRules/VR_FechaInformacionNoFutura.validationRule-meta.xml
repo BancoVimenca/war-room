@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>VR_FechaInformacionNoFutura</fullName>
+    <active>true</active>
+    <description>Impide que la fecha y hora de la información financiera sean posteriores al momento actual.</description>
+    <errorConditionFormula>AND(
+    NOT(ISBLANK(LEA_Fecha_Informacion__c)),
+    LEA_Fecha_Informacion__c &gt; NOW()
+)</errorConditionFormula>
+    <errorDisplayField>LEA_Fecha_Informacion__c</errorDisplayField>
+    <errorMessage>La fecha de la información no puede ser posterior a la fecha y hora actuales.</errorMessage>
+</ValidationRule>

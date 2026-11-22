@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<ValidationRule xmlns="http://soap.sforce.com/2006/04/metadata">
+    <fullName>Tipo_de_Vinculacion_Obligatorio</fullName>
+    <active>true</active>
+    <description>Colocar un valor distinto a SIN DEFINIR en el tipo de vinculacion</description>
+    <errorConditionFormula>AND(
+    IsConverted,
+    ISCHANGED(IsConverted),
+    OR(
+        ISBLANK(TEXT(LEA_Tipo_Vinculacion__c)),
+        ISPICKVAL(LEA_Tipo_Vinculacion__c, &quot;SIN DEFINIR&quot;)
+    )
+)</errorConditionFormula>
+    <errorMessage>Antes de convertir el Lead, seleccioná un Tipo de vinculación válido. No puede quedar vacío ni en SIN DEFINIR.</errorMessage>
+</ValidationRule>

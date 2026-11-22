@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<StandardValueSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <sorted>false</sorted>
+    <standardValue>
+        <fullName>RESIDENCIA</fullName>
+        <default>false</default>
+        <label>RESIDENCIA</label>
+    </standardValue>
+    <standardValue>
+        <fullName>EMPRESARIAL</fullName>
+        <default>false</default>
+        <label>EMPRESARIAL</label>
+    </standardValue>
+    <standardValue>
+        <fullName>LABORAL</fullName>
+        <default>false</default>
+        <label>LABORAL</label>
+    </standardValue>
+    <standardValue>
+        <fullName>CONTACTO</fullName>
+        <default>false</default>
+        <label>CONTACTO</label>
+    </standardValue>
+    <standardValue>
+        <fullName>COURRIER</fullName>
+        <default>false</default>
+        <label>COURRIER</label>
+    </standardValue>
+</StandardValueSet>
