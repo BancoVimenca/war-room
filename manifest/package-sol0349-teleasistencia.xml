@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>Account.ACC_Fecha_Consulta_Productos__c</members>
+        <members>FinServ__FinancialAccount__c.FIN_Migrado__c</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>Perfil Vimenca - Teleasistencia</members>
+        <name>Profile</name>
+    </types>
+    <version>68.0</version>
+</Package>
