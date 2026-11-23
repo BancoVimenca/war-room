@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
+        <fullName>FIN_Migrado__c</fullName>
+        <defaultValue>false</defaultValue>
+        <description>Marcado por AssetFinAccountMigrationBatch cuando la cuenta financiera fue creada o completada a partir de un Asset. FinServ__SourceSystemId__c guarda el Id del Asset de origen.</description>
+        <inlineHelpText>Indica que esta cuenta financiera proviene de la migración desde Asset.</inlineHelpText>
+        <label>Migrado</label>
+        <trackHistory>false</trackHistory>
+        <trackTrending>false</trackTrending>
+        <type>Checkbox</type>
+    </CustomField>
