@@ -1,4 +1,4 @@
-<?xml version='1.0' encoding='UTF-8'?>
+<?xml version='1.0' encoding='utf-8'?>
 <CustomField xmlns="http://soap.sforce.com/2006/04/metadata">
     <fullName>FSC_Lineas_Financieras_Empresas__c</fullName>
     <externalId>false</externalId>
@@ -1245,6 +1245,11 @@
                 <fullName>VIALEASING</fullName>
                 <default>false</default>
                 <label>VIALEASING</label>
+            </value>
+                    <value>
+                <fullName>DIVANO (ILUMEL)</fullName>
+                <default>false</default>
+                <label>DIVANO (ILUMEL)</label>
             </value>
         </valueSetDefinition>
     </valueSet>
