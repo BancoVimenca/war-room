@@ -1256,6 +1256,11 @@
                 <default>false</default>
                 <label>DIVANO (LUXURY FURNITURE RENTAL)</label>
             </value>
+                    <value>
+                <fullName>INVERSIONES BIENES MUEBLES E INMUEBLES CEGARDI</fullName>
+                <default>false</default>
+                <label>INVERSIONES BIENES MUEBLES E INMUEBLES CEGARDI</label>
+            </value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>
