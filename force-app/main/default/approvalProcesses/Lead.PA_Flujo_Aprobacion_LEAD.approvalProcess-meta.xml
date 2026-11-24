@@ -80,6 +80,6 @@
     <finalRejectionRecordLock>false</finalRejectionRecordLock>
     <label>PA Flujo Aprobacion  LEAD</label>
     <processOrder>1</processOrder>
-    <recordEditability>AdminOnly</recordEditability>
+    <recordEditability>AdminOrCurrentApprover</recordEditability>
     <showApprovalHistory>true</showApprovalHistory>
 </ApprovalProcess>
