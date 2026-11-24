@@ -1251,6 +1251,11 @@
                 <default>false</default>
                 <label>DIVANO (ILUMEL)</label>
             </value>
+                    <value>
+                <fullName>DIVANO (LUXURY FURNITURE RENTAL)</fullName>
+                <default>false</default>
+                <label>DIVANO (LUXURY FURNITURE RENTAL)</label>
+            </value>
         </valueSetDefinition>
     </valueSet>
 </CustomField>
