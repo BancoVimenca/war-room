@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>FSC_ExcepcionSelector</members>
+        <members>FSC_ExcepcionesCreditoController</members>
+        <members>FSC_ExcepcionesCreditoControllerTest</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>fsc_RlaAcciones</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <version>58.0</version>
+</Package>
