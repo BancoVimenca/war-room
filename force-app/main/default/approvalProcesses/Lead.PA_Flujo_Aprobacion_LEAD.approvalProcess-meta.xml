@@ -76,7 +76,7 @@
             <value>EN REVISIÓN</value>
         </criteriaItems>
     </entryCriteria>
-    <finalApprovalRecordLock>true</finalApprovalRecordLock>
+    <finalApprovalRecordLock>false</finalApprovalRecordLock>
     <finalRejectionRecordLock>false</finalRejectionRecordLock>
     <label>PA Flujo Aprobacion  LEAD</label>
     <processOrder>1</processOrder>
