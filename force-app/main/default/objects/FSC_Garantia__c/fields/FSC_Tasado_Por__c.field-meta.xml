@@ -165,6 +165,11 @@
                 <label>Jaime Oscar Gonzalez Hernandez</label>
             </value>
             <value>
+                <fullName>Ing. Nelson Pantaleon (Neparo)</fullName>
+                <default>false</default>
+                <label>Ing. Nelson Pantaleon (Neparo)</label>
+            </value>
+            <value>
                 <fullName>Tasador 1</fullName>
                 <default>false</default>
                 <isActive>false</isActive>
