@@ -1,0 +1,190 @@
+import { LightningElement, track, wire } from 'lwc';
+import { NavigationMixin } from 'lightning/navigation';
+import { refreshApex } from '@salesforce/apex';
+import getWorkspaceMetrics from '@salesforce/apex/FSC_CreditWorkspaceController.getWorkspaceMetrics';
+import getCreditApplications from '@salesforce/apex/FSC_CreditWorkspaceController.getCreditApplications';
+
+const COLUMNS = [
+    {
+        label: 'Solicitud de Crédito',
+        fieldName: 'recordUrl',
+        type: 'url',
+        typeAttributes: {
+            label: { fieldName: 'name' },
+            target: '_blank'
+        },
+        sortable: true,
+        initialWidth: 260
+    },
+    {
+        label: 'Cliente',
+        fieldName: 'accountName',
+        type: 'text',
+        sortable: true,
+        initialWidth: 220
+    },
+    {
+        label: 'Producto / Tipo',
+        fieldName: 'productType',
+        type: 'text',
+        sortable: true,
+        initialWidth: 160
+    },
+    {
+        label: 'Monto Solicitado',
+        fieldName: 'monto',
+        type: 'currency',
+        typeAttributes: { currencyCode: 'DOP' },
+        sortable: true,
+        initialWidth: 150
+    },
+    {
+        label: 'Subestado Actual',
+        fieldName: 'subestado',
+        type: 'text',
+        sortable: true,
+        initialWidth: 220
+    },
+    {
+        label: 'Excepción',
+        fieldName: 'detalleExcepcion',
+        type: 'text',
+        sortable: true,
+        initialWidth: 180,
+        cellAttributes: {
+            class: { fieldName: 'excepcionCssClass' }
+        }
+    },
+    {
+        label: 'Turno / Responsable',
+        fieldName: 'turnoActual',
+        type: 'text',
+        sortable: true,
+        initialWidth: 180
+    },
+    {
+        label: 'Fecha Creación',
+        fieldName: 'createdDate',
+        type: 'date',
+        typeAttributes: {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        },
+        sortable: true,
+        initialWidth: 160
+    },
+    {
+        type: 'action',
+        typeAttributes: {
+            rowActions: [
+                { label: 'Ver Solicitud', name: 'view_record' }
+            ]
+        }
+    }
+];
+
+export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(LightningElement) {
+    @track activeTab = 'excepciones';
+    @track searchKey = '';
+    @track rows = [];
+    @track columns = COLUMNS;
+    @track isLoading = true;
+    @track sortedBy = 'createdDate';
+    @track sortDirection = 'desc';
+
+    @track metrics = {
+        misPendientesDirectos: 0,
+        excepcionesActivas: 0,
+        enAnalisis: 0,
+        comiteSupervision: 0,
+        formalizacionCustodia: 0,
+        montoTotalCartera: 0
+    };
+
+    wiredMetricsResult;
+    wiredRowsResult;
+
+    @wire(getWorkspaceMetrics)
+    wiredMetrics(result) {
+        this.wiredMetricsResult = result;
+        if (result.data) {
+            this.metrics = result.data;
+        }
+    }
+
+    @wire(getCreditApplications, { tabName: '$activeTab', searchKey: '$searchKey' })
+    wiredApplications(result) {
+        this.wiredRowsResult = result;
+        this.isLoading = false;
+        if (result.data) {
+            this.rows = result.data.map(item => {
+                return {
+                    ...item,
+                    excepcionCssClass: item.tieneExcepcion ? 'slds-text-color_error font-bold' : 'slds-text-color_weak'
+                };
+            });
+        } else if (result.error) {
+            this.rows = [];
+        }
+    }
+
+    get formattedTotalMonto() {
+        const monto = this.metrics.montoTotalCartera || 0;
+        return new Intl.NumberFormat('es-DO', {
+            style: 'currency',
+            currency: 'DOP',
+            maximumFractionDigits: 0
+        }).format(monto);
+    }
+
+    handleTabSelect(event) {
+        this.activeTab = event.target.value;
+        this.isLoading = true;
+    }
+
+    handleSearchChange(event) {
+        this.searchKey = event.target.value;
+        this.isLoading = true;
+    }
+
+    async handleRefresh() {
+        this.isLoading = true;
+        await Promise.all([
+            refreshApex(this.wiredMetricsResult),
+            refreshApex(this.wiredRowsResult)
+        ]);
+        this.isLoading = false;
+    }
+
+    handleRowAction(event) {
+        const actionName = event.detail.action.name;
+        const row = event.detail.row;
+        if (actionName === 'view_record') {
+            this[NavigationMixin.Navigate]({
+                type: 'standard__recordPage',
+                attributes: {
+                    recordId: row.recordId,
+                    actionName: 'view'
+                }
+            });
+        }
+    }
+
+    handleSort(event) {
+        const { fieldName: sortedBy, sortDirection } = event.detail;
+        const cloneData = [...this.rows];
+
+        cloneData.sort((a, b) => {
+            let valA = a[sortedBy] ? a[sortedBy] : '';
+            let valB = b[sortedBy] ? b[sortedBy] : '';
+            return sortDirection === 'asc' ? (valA > valB ? 1 : -1) : (valA < valB ? 1 : -1);
+        });
+
+        this.rows = cloneData;
+        this.sortDirection = sortDirection;
+        this.sortedBy = sortedBy;
+    }
+}
