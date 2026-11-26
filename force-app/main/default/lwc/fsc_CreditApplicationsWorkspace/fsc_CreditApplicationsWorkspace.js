@@ -43,6 +43,20 @@ const COLUMNS = [
         initialWidth: 220
     },
     {
+        label: 'Fecha en Subestado',
+        fieldName: 'fechaSubestado',
+        type: 'date',
+        typeAttributes: {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        },
+        sortable: true,
+        initialWidth: 170
+    },
+    {
         label: 'Solicitud de Crédito',
         fieldName: 'name',
         type: 'text',
@@ -61,7 +75,7 @@ const COLUMNS = [
         fieldName: 'productType',
         type: 'text',
         sortable: true,
-        initialWidth: 150
+        initialWidth: 160
     },
     {
         label: 'Monto Solicitado',
@@ -70,13 +84,6 @@ const COLUMNS = [
         typeAttributes: { currencyCode: 'DOP' },
         sortable: true,
         initialWidth: 140
-    },
-    {
-        label: 'Estado General',
-        fieldName: 'status',
-        type: 'text',
-        sortable: true,
-        initialWidth: 130
     },
     {
         label: 'Excepción',
