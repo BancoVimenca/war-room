@@ -411,7 +411,20 @@ public with sharing class FSC_CreditWorkspaceController {
 				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'OFICIAL_NEGOCIO');
 			}
 		}
-		else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito') {
+		else if (sub == 'Recepción de documentos – Análisis') {
+			// Si no tiene analista asignado, el turno sigue siendo del Oficial de Negocio para completar recaudos
+			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
+				turno = rla.FSC_UsuarioAnalista__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
+			} else if (rla.Owner != null) {
+				turno = rla.Owner.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId || effectiveRole == 'OFICIAL_NEGOCIO');
+			} else {
+				turno = 'Oficial de Negocio';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'OFICIAL_NEGOCIO');
+			}
+		}
+		else if (sub == 'Análisis de crédito') {
 			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
 				turno = rla.FSC_UsuarioAnalista__r.Name;
 				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
@@ -538,15 +551,31 @@ public with sharing class FSC_CreditWorkspaceController {
 	}
 
 	private static Set<Id> getUserGroupIds(Id userId) {
-		Set<Id> groupIds = new Set<Id>();
-		for (GroupMember gm : [
-			SELECT GroupId
-			FROM GroupMember
-			WHERE UserOrGroupId = :userId
-			WITH SYSTEM_MODE
-		]) {
-			groupIds.add(gm.GroupId);
+		Set<Id> currentGroupIds = new Set<Id>{ userId };
+		Set<Id> allGroupIds = new Set<Id>();
+
+		Boolean hasMore = true;
+		Integer depth = 0;
+		while (hasMore && depth < 5) {
+			depth++;
+			Set<Id> nextGroupIds = new Set<Id>();
+			for (GroupMember gm : [
+				SELECT GroupId
+				FROM GroupMember
+				WHERE UserOrGroupId IN :currentGroupIds
+				WITH SYSTEM_MODE
+			]) {
+				if (!allGroupIds.contains(gm.GroupId)) {
+					allGroupIds.add(gm.GroupId);
+					nextGroupIds.add(gm.GroupId);
+				}
+			}
+			if (nextGroupIds.isEmpty()) {
+				hasMore = false;
+			} else {
+				currentGroupIds = nextGroupIds;
+			}
 		}
-		return groupIds;
+		return allGroupIds;
 	}
 }
