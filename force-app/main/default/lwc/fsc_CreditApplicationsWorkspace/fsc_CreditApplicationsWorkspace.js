@@ -57,11 +57,18 @@ const COLUMNS = [
         initialWidth: 170
     },
     {
-        label: 'Solicitud de Crédito',
-        fieldName: 'name',
-        type: 'text',
+        label: 'Fecha Creación',
+        fieldName: 'createdDate',
+        type: 'date',
+        typeAttributes: {
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+            hour: '2-digit',
+            minute: '2-digit'
+        },
         sortable: true,
-        initialWidth: 240
+        initialWidth: 150
     },
     {
         label: 'Cliente',
@@ -94,20 +101,6 @@ const COLUMNS = [
         cellAttributes: {
             class: { fieldName: 'excepcionCssClass' }
         }
-    },
-    {
-        label: 'Fecha Creación',
-        fieldName: 'createdDate',
-        type: 'date',
-        typeAttributes: {
-            year: 'numeric',
-            month: '2-digit',
-            day: '2-digit',
-            hour: '2-digit',
-            minute: '2-digit'
-        },
-        sortable: true,
-        initialWidth: 150
     },
     {
         type: 'action',
