@@ -55,6 +55,13 @@ const COLUMNS = [
         initialWidth: 150
     },
     {
+        label: 'Estado General',
+        fieldName: 'status',
+        type: 'text',
+        sortable: true,
+        initialWidth: 140
+    },
+    {
         label: 'Subestado Actual',
         fieldName: 'subestado',
         type: 'text',
@@ -116,6 +123,7 @@ export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(Lig
     @track metrics = {
         misPendientesDirectos: 0,
         excepcionesActivas: 0,
+        enRecepcion: 0,
         enAnalisis: 0,
         comiteSupervision: 0,
         formalizacionCustodia: 0,

@@ -3,6 +3,7 @@ public with sharing class FSC_CreditWorkspaceController {
 	public class WorkspaceMetrics {
 		@AuraEnabled public Integer misPendientesDirectos { get; set; }
 		@AuraEnabled public Integer excepcionesActivas { get; set; }
+		@AuraEnabled public Integer enRecepcion { get; set; }
 		@AuraEnabled public Integer enAnalisis { get; set; }
 		@AuraEnabled public Integer comiteSupervision { get; set; }
 		@AuraEnabled public Integer formalizacionCustodia { get; set; }
@@ -14,6 +15,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		public WorkspaceMetrics() {
 			this.misPendientesDirectos = 0;
 			this.excepcionesActivas = 0;
+			this.enRecepcion = 0;
 			this.enAnalisis = 0;
 			this.comiteSupervision = 0;
 			this.formalizacionCustodia = 0;
@@ -145,11 +147,15 @@ public with sharing class FSC_CreditWorkspaceController {
 				}
 			}
 
-			// Etapa Análisis
+			// Etapa Recepción, Buró y PEP
 			if (rla.FSC_Subestado__c == 'Recepción de documentos – Análisis' ||
-			    rla.FSC_Subestado__c == 'Análisis de crédito' ||
 			    rla.FSC_Subestado__c == 'En validación PEP/Listas' ||
 			    rla.FSC_Subestado__c == 'En Motor Buró') {
+				metrics.enRecepcion++;
+			}
+
+			// Etapa Análisis de Crédito (exclusiva)
+			if (rla.FSC_Subestado__c == 'Análisis de crédito') {
 				metrics.enAnalisis++;
 			}
 
@@ -250,8 +256,10 @@ public with sharing class FSC_CreditWorkspaceController {
 		String filterCondition = '';
 		if (tabName == 'excepciones') {
 			filterCondition = 'AND (FSC_SolicitaExcepcionParaRechazoDeBuro__c = true OR Id IN :targetExceptionRlaIds) ';
+		} else if (tabName == 'recepcion') {
+			filterCondition = 'AND FSC_Subestado__c IN (\'Recepción de documentos – Análisis\', \'En validación PEP/Listas\', \'En Motor Buró\') ';
 		} else if (tabName == 'analisis') {
-			filterCondition = 'AND FSC_Subestado__c IN (\'Recepción de documentos – Análisis\', \'Análisis de crédito\', \'En validación PEP/Listas\', \'En Motor Buró\') ';
+			filterCondition = 'AND FSC_Subestado__c = \'Análisis de crédito\' ';
 		} else if (tabName == 'comite') {
 			filterCondition = 'AND (FSC_DebeRevisarComite__c = true OR FSC_DebeRevisarSupervisor__c = true) ';
 		} else if (tabName == 'formalizacion') {
