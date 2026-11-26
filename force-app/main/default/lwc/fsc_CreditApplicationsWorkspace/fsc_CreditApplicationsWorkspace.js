@@ -183,9 +183,20 @@ export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(Lig
         }
     }
 
+    handleTabActive(event) {
+        const newTab = event.target.value;
+        if (newTab && this.activeTab !== newTab) {
+            this.activeTab = newTab;
+            this.isLoading = true;
+        }
+    }
+
     handleTabSelect(event) {
-        this.activeTab = event.target.value;
-        this.isLoading = true;
+        const val = event.target.value || event.detail.value;
+        if (val && this.activeTab !== val) {
+            this.activeTab = val;
+            this.isLoading = true;
+        }
     }
 
     handleSearchChange(event) {
