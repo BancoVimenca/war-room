@@ -15,13 +15,20 @@ const ROLE_OPTIONS = [
 
 const COLUMNS = [
     {
-        label: 'Solicitud de Crédito',
+        label: 'Código / Correlativo',
         fieldName: 'recordUrl',
         type: 'url',
         typeAttributes: {
-            label: { fieldName: 'name' },
+            label: { fieldName: 'numeroSolicitud' },
             target: '_blank'
         },
+        sortable: true,
+        initialWidth: 160
+    },
+    {
+        label: 'Solicitud de Crédito',
+        fieldName: 'name',
+        type: 'text',
         sortable: true,
         initialWidth: 260
     },
