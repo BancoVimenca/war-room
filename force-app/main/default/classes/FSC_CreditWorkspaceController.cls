@@ -22,6 +22,7 @@ public with sharing class FSC_CreditWorkspaceController {
 
 	public class CreditApplicationRow {
 		@AuraEnabled public Id recordId { get; set; }
+		@AuraEnabled public String numeroSolicitud { get; set; }
 		@AuraEnabled public String name { get; set; }
 		@AuraEnabled public String recordUrl { get; set; }
 		@AuraEnabled public String accountId { get; set; }
@@ -206,7 +207,7 @@ public with sharing class FSC_CreditWorkspaceController {
 			}
 		}
 
-		String query = 'SELECT Id, Name, AccountId, Account.Name, RecordType.Name, FSC_Monto__c, ' +
+		String query = 'SELECT Id, Name, FSC_NumeroSolicitud__c, AccountId, Account.Name, RecordType.Name, FSC_Monto__c, ' +
 		               'Status, FSC_Subestado__c, OwnerId, Owner.Name, CreatedDate, ' +
 		               'FSC_SolicitaExcepcionParaRechazoDeBuro__c, FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c, ' +
 		               'FSC_UsuarioAnalista__c, FSC_UsuarioAnalista__r.Name, ' +
@@ -248,7 +249,7 @@ public with sharing class FSC_CreditWorkspaceController {
 
 		if (String.isNotBlank(searchKey)) {
 			String key = '%' + String.escapeSingleQuotes(searchKey.trim()) + '%';
-			query += 'AND (Name LIKE :key OR Account.Name LIKE :key) ';
+			query += 'AND (Name LIKE :key OR Account.Name LIKE :key OR FSC_NumeroSolicitud__c LIKE :key) ';
 		}
 
 		query += 'ORDER BY CreatedDate DESC LIMIT 150';
@@ -258,6 +259,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		for (ResidentialLoanApplication rla : records) {
 			CreditApplicationRow row = new CreditApplicationRow();
 			row.recordId = rla.Id;
+			row.numeroSolicitud = String.isNotBlank(rla.FSC_NumeroSolicitud__c) ? rla.FSC_NumeroSolicitud__c : '-';
 			row.name = rla.Name;
 			row.recordUrl = '/' + rla.Id;
 			row.accountId = rla.AccountId;
