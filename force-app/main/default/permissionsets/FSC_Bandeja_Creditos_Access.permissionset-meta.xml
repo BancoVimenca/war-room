@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<PermissionSet xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Otorga visibilidad y acceso a la Bandeja de Gestión de Solicitudes de Crédito.</description>
+    <hasActivationRequired>false</hasActivationRequired>
+    <label>Acceso Bandeja de Créditos</label>
+    <classAccesses>
+        <apexClass>FSC_CreditWorkspaceController</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <tabSettings>
+        <tab>FSC_Bandeja_Creditos_Page</tab>
+        <visibility>Visible</visibility>
+    </tabSettings>
+</PermissionSet>
