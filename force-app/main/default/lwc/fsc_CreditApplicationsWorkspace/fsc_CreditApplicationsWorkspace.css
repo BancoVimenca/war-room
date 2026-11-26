@@ -11,3 +11,12 @@
 .font-bold {
     font-weight: 700;
 }
+
+.admin-role-selector {
+    width: 320px;
+}
+
+.role-alert {
+    border-radius: 4px;
+    font-size: 0.85rem;
+}

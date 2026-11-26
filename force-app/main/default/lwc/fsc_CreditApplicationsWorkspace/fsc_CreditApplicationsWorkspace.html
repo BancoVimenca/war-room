@@ -1,7 +1,22 @@
 <template>
     <lightning-card title="Bandeja de Gestión de Solicitudes de Crédito" icon-name="standard:service_contract">
         
-        <div slot="actions">
+        <div slot="actions" class="slds-grid slds-grid_vertical-align-center">
+            
+            <!-- Selector de Simulación por Perfil (Exclusivo Administrador) -->
+            <template if:true={isAdminUser}>
+                <div class="slds-m-right_small admin-role-selector">
+                    <lightning-combobox
+                        name="simulatedRole"
+                        label="Perspectiva / Rol (Admin)"
+                        variant="label-hidden"
+                        value={selectedRole}
+                        options={roleOptions}
+                        onchange={handleRoleChange}>
+                    </lightning-combobox>
+                </div>
+            </template>
+
             <lightning-button
                 label="Actualizar"
                 icon-name="utility:refresh"
@@ -11,13 +26,26 @@
         </div>
 
         <div class="slds-p-around_medium">
+
+            <!-- Banner Informativo de Rol Simulado para Admin -->
+            <template if:true={isSimulating}>
+                <div class="slds-notify slds-notify_alert slds-alert_info slds-m-bottom_small role-alert" role="alert">
+                    <span class="slds-icon_container slds-icon-utility-info slds-m-right_x-small">
+                        <lightning-icon icon-name="utility:preview" size="x-small" variant="inverse"></lightning-icon>
+                    </span>
+                    <h2>
+                        <strong>Modo Auditoría / Simulación Activo:</strong> Estás visualizando la bandeja y los KPIs desde la perspectiva de: <u>{currentRoleLabel}</u>.
+                    </h2>
+                </div>
+            </template>
+
             <!-- Métricas e Indicadores Superiores -->
             <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_medium">
                 
                 <!-- KPI 1: Mis Pendientes Directos -->
                 <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Aprobaciones directas pendientes asignadas a ti o a tus colas">Mis Pendientes</div>
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Aprobaciones directas pendientes asignadas a ti o a las colas del rol">Mis Pendientes</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #c23934;">
                             <strong>{metrics.misPendientesDirectos}</strong>
                         </div>

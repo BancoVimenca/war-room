@@ -7,6 +7,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		@AuraEnabled public Integer comiteSupervision { get; set; }
 		@AuraEnabled public Integer formalizacionCustodia { get; set; }
 		@AuraEnabled public Decimal montoTotalCartera { get; set; }
+		@AuraEnabled public Boolean isAdministrator { get; set; }
 
 		public WorkspaceMetrics() {
 			this.misPendientesDirectos = 0;
@@ -15,6 +16,7 @@ public with sharing class FSC_CreditWorkspaceController {
 			this.comiteSupervision = 0;
 			this.formalizacionCustodia = 0;
 			this.montoTotalCartera = 0.0;
+			this.isAdministrator = false;
 		}
 	}
 
@@ -36,27 +38,53 @@ public with sharing class FSC_CreditWorkspaceController {
 		@AuraEnabled public Boolean esAccionablePorUsuario { get; set; }
 	}
 
+	private static final Set<String> QUEUES_ANALISIS = new Set<String>{
+		'FSC_ColaAnalistasDeCredito', 'FSC_Cola_Excepcion_Buro',
+		'FSC_ColaAnalistasDeCredito_Consumo', 'FSC_ColaAnalistasDeCredito_Hipotecario',
+		'FSC_ColaAnalistasDeCredito_PYME', 'FSC_ColaAnalistasDeCredito_Vehiculo'
+	};
+
+	private static final Set<String> QUEUES_EXCEPCIONES = new Set<String>{
+		'FSC_Cola_Excepcion_Buro', 'FSC_VPNegociosBancaPersona',
+		'FSC_VPNegociosBancaEmpresarial', 'FSC_VPCreditoRecuperacion'
+	};
+
+	private static final Set<String> QUEUES_COMITE = new Set<String>{
+		'FSC_ColaSupervisores', 'FSC_ColaComiteI', 'FSC_ColaComiteII', 'FSC_ColaComiteIII'
+	};
+
+	private static final Set<String> QUEUES_FORMALIZACION = new Set<String>{
+		'FSC_GestionDePagaresYContratos', 'FSC_GestionFormalizacion',
+		'FSC_Cola_Archivo_y_custodia_de_valores', 'FSC_GestionPlanillasDeDesembolso'
+	};
+
 	@AuraEnabled(cacheable=true)
-	public static WorkspaceMetrics getWorkspaceMetrics() {
+	public static WorkspaceMetrics getWorkspaceMetrics(String simulatedRole) {
 		WorkspaceMetrics metrics = new WorkspaceMetrics();
 		Id currentUserId = UserInfo.getUserId();
-		Set<Id> userGroupIds = getUserGroupIds(currentUserId);
+		Boolean isAdmin = checkIsAdminUser();
+		metrics.isAdministrator = isAdmin;
 
-		// 1. Mis pendientes directos vía ProcessInstanceWorkitem
-		Set<Id> allUserTargets = new Set<Id>();
-		allUserTargets.add(currentUserId);
-		allUserTargets.addAll(userGroupIds);
+		// Si no es admin, ignorar el rol simulado y usar identidad real
+		String effectiveRole = (isAdmin && String.isNotBlank(simulatedRole)) ? simulatedRole : 'REAL_USER';
 
+		Set<Id> targetActorIds = resolveTargetActorIds(currentUserId, effectiveRole);
+
+		// 1. Pendientes directos vía ProcessInstanceWorkitem
 		List<ProcessInstanceWorkitem> pendingItems = [
-			SELECT Id, ProcessInstance.TargetObjectId
+			SELECT Id, ProcessInstance.TargetObjectId, ActorId
 			FROM ProcessInstanceWorkitem
-			WHERE ActorId IN :allUserTargets
 			WITH SYSTEM_MODE
-			LIMIT 500
+			LIMIT 1000
 		];
+
 		Set<Id> directPendingTargetIds = new Set<Id>();
+		Integer globalPendingCount = 0;
 		for (ProcessInstanceWorkitem item : pendingItems) {
-			directPendingTargetIds.add(item.ProcessInstance.TargetObjectId);
+			globalPendingCount++;
+			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(item.ActorId)) {
+				directPendingTargetIds.add(item.ProcessInstance.TargetObjectId);
+			}
 		}
 
 		// 2. Conteo de Excepciones de Crédito activas (FSC_Excepcion__c)
@@ -77,7 +105,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		// 3. Consultar Solicitudes activas para métricas
 		List<ResidentialLoanApplication> solicitudesActivas = [
 			SELECT Id, Status, FSC_Subestado__c, FSC_Monto__c, FSC_SolicitaExcepcionParaRechazoDeBuro__c,
-			       FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c
+			       FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c, OwnerId
 			FROM ResidentialLoanApplication
 			WHERE Status = 'En proceso'
 			WITH USER_MODE
@@ -97,8 +125,18 @@ public with sharing class FSC_CreditWorkspaceController {
 			}
 
 			// Directo
-			if (directPendingTargetIds.contains(rla.Id) || (tieneExc && directPendingTargetIds.contains(rla.Id))) {
-				metrics.misPendientesDirectos++;
+			if (effectiveRole == 'ADMIN_ALL') {
+				if (directPendingTargetIds.contains(rla.Id)) {
+					metrics.misPendientesDirectos++;
+				}
+			} else if (effectiveRole == 'OFICIAL') {
+				if (rla.OwnerId == currentUserId && directPendingTargetIds.contains(rla.Id)) {
+					metrics.misPendientesDirectos++;
+				}
+			} else {
+				if (directPendingTargetIds.contains(rla.Id)) {
+					metrics.misPendientesDirectos++;
+				}
 			}
 
 			// Etapa Análisis
@@ -122,18 +160,22 @@ public with sharing class FSC_CreditWorkspaceController {
 			}
 		}
 
+		if (effectiveRole == 'ADMIN_ALL') {
+			metrics.misPendientesDirectos = globalPendingCount;
+		}
+
 		metrics.montoTotalCartera = sumaMonto;
 		return metrics;
 	}
 
 	@AuraEnabled(cacheable=true)
-	public static List<CreditApplicationRow> getCreditApplications(String tabName, String searchKey) {
+	public static List<CreditApplicationRow> getCreditApplications(String tabName, String searchKey, String simulatedRole) {
 		List<CreditApplicationRow> rows = new List<CreditApplicationRow>();
 		Id currentUserId = UserInfo.getUserId();
-		Set<Id> userGroupIds = getUserGroupIds(currentUserId);
-		Set<Id> allUserTargets = new Set<Id>();
-		allUserTargets.add(currentUserId);
-		allUserTargets.addAll(userGroupIds);
+		Boolean isAdmin = checkIsAdminUser();
+		String effectiveRole = (isAdmin && String.isNotBlank(simulatedRole)) ? simulatedRole : 'REAL_USER';
+
+		Set<Id> targetActorIds = resolveTargetActorIds(currentUserId, effectiveRole);
 
 		// Mapear aprobaciones activas por TargetObjectId
 		Map<Id, ProcessInstanceWorkitem> workitemsByTarget = new Map<Id, ProcessInstanceWorkitem>();
@@ -178,13 +220,20 @@ public with sharing class FSC_CreditWorkspaceController {
 		} else if (tabName == 'formalizacion') {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Generación de pagarés y plantillas\', \'Gestionar firmas\', \'Archivo y custodia\') ';
 		} else if (tabName == 'mis_casos') {
-			filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds) ';
+			if (effectiveRole == 'ADMIN_ALL') {
+				// Admin en modo global ve todas las que tienen turno activo o asignadas
+				filterCondition = 'AND Status = \'En proceso\' ';
+			} else if (effectiveRole == 'OFICIAL') {
+				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds) ';
+			} else {
+				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds) ';
+			}
 		}
 
 		Set<Id> targetExceptionRlaIds = excepcionesBySolicitud.keySet();
 		Set<Id> userActionableRlaIds = new Set<Id>();
 		for (ProcessInstanceWorkitem piw : workitemsByTarget.values()) {
-			if (allUserTargets.contains(piw.ActorId)) {
+			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId)) {
 				userActionableRlaIds.add(piw.ProcessInstance.TargetObjectId);
 			}
 		}
@@ -234,16 +283,65 @@ public with sharing class FSC_CreditWorkspaceController {
 			if (workitemsByTarget.containsKey(rla.Id)) {
 				ProcessInstanceWorkitem piw = workitemsByTarget.get(rla.Id);
 				row.turnoActual = piw.Actor != null ? piw.Actor.Name : 'En aprobación';
-				row.esAccionablePorUsuario = allUserTargets.contains(piw.ActorId);
+				row.esAccionablePorUsuario = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId));
 			} else {
 				row.turnoActual = rla.Owner != null ? rla.Owner.Name : '-';
-				row.esAccionablePorUsuario = (rla.OwnerId == currentUserId);
+				row.esAccionablePorUsuario = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId);
 			}
 
 			rows.add(row);
 		}
 
 		return rows;
+	}
+
+	private static Boolean checkIsAdminUser() {
+		List<Profile> profs = [
+			SELECT Name FROM Profile WHERE Id = :UserInfo.getProfileId() LIMIT 1
+		];
+		if (!profs.isEmpty() && profs[0].Name == 'Administrador del sistema') {
+			return true;
+		}
+		return FeatureManagement.checkPermission('ModifyAllData');
+	}
+
+	private static Set<Id> resolveTargetActorIds(Id userId, String effectiveRole) {
+		Set<Id> actorIds = new Set<Id>();
+		actorIds.add(userId);
+
+		if (effectiveRole == 'ADMIN_ALL') {
+			return actorIds;
+		}
+
+		if (effectiveRole == 'REAL_USER') {
+			actorIds.addAll(getUserGroupIds(userId));
+			return actorIds;
+		}
+
+		Set<String> queueDeveloperNames = new Set<String>();
+		if (effectiveRole == 'ANALISTA') {
+			queueDeveloperNames = QUEUES_ANALISIS;
+		} else if (effectiveRole == 'EXCEPCIONES') {
+			queueDeveloperNames = QUEUES_EXCEPCIONES;
+		} else if (effectiveRole == 'COMITE') {
+			queueDeveloperNames = QUEUES_COMITE;
+		} else if (effectiveRole == 'FORMALIZACION') {
+			queueDeveloperNames = QUEUES_FORMALIZACION;
+		} else if (effectiveRole == 'OFICIAL') {
+			// Solo el usuario como originador
+			return actorIds;
+		}
+
+		if (!queueDeveloperNames.isEmpty()) {
+			for (Group grp : [
+				SELECT Id FROM Group WHERE Type = 'Queue' AND DeveloperName IN :queueDeveloperNames
+				WITH SYSTEM_MODE
+			]) {
+				actorIds.add(grp.Id);
+			}
+		}
+
+		return actorIds;
 	}
 
 	private static Set<Id> getUserGroupIds(Id userId) {
