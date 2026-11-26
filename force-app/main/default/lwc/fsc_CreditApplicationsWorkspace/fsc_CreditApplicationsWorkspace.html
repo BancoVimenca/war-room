@@ -1,0 +1,226 @@
+<template>
+    <lightning-card title="Bandeja de Gestión de Solicitudes de Crédito" icon-name="standard:service_contract">
+        
+        <div slot="actions">
+            <lightning-button
+                label="Actualizar"
+                icon-name="utility:refresh"
+                onclick={handleRefresh}
+                disabled={isLoading}>
+            </lightning-button>
+        </div>
+
+        <div class="slds-p-around_medium">
+            <!-- Métricas e Indicadores Superiores -->
+            <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_medium">
+                
+                <!-- KPI 1: Mis Pendientes Directos -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Aprobaciones directas pendientes asignadas a ti o a tus colas">Mis Pendientes</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #c23934;">
+                            <strong>{metrics.misPendientesDirectos}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">Por Dictaminar</div>
+                    </div>
+                </div>
+
+                <!-- KPI 2: Excepciones Activas -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Solicitudes con excepciones de Buró o de Negocios en trámite">Excepciones</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #ea8a00;">
+                            <strong>{metrics.excepcionesActivas}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">En Trámite</div>
+                    </div>
+                </div>
+
+                <!-- KPI 3: En Recepción & Análisis -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos en validación PEP, Motor Buró o Análisis de Riesgo">En Análisis</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0176d3;">
+                            <strong>{metrics.enAnalisis}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">Riesgo & Buró</div>
+                    </div>
+                </div>
+
+                <!-- KPI 4: Comité & Supervisión -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos escalados a comités de crédito o supervisores">Comité / Sup.</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #5b21b6;">
+                            <strong>{metrics.comiteSupervision}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">En Instancias</div>
+                    </div>
+                </div>
+
+                <!-- KPI 5: Formalización & Custodia -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Generación de pagarés, firmas y archivo de valores">Formalización</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0b827c;">
+                            <strong>{metrics.formalizacionCustodia}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">Pagarés & Firmas</div>
+                    </div>
+                </div>
+
+                <!-- KPI 6: Cartera Activa Total -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total consolidado en proceso de crédito">Monto en Proceso</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #2e844a;">
+                            <strong>{formattedTotalMonto}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">RD$ Total Trámite</div>
+                    </div>
+                </div>
+
+            </div>
+
+            <!-- Barra de Filtros y Búsqueda -->
+            <div class="slds-grid slds-wrap slds-grid_align-spread slds-grid_vertical-align-center slds-m-bottom_small">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12">
+                    <p class="slds-text-body_small slds-text-color_weak">
+                        Bandeja operativa multirrol para gestión de aprobaciones, excepciones y avance del ciclo de crédito.
+                    </p>
+                </div>
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_5-of-12">
+                    <lightning-input
+                        name="searchKey"
+                        label="Buscar por solicitud o cliente"
+                        type="search"
+                        variant="label-hidden"
+                        placeholder="Buscar por código de solicitud o cliente..."
+                        value={searchKey}
+                        onchange={handleSearchChange}>
+                    </lightning-input>
+                </div>
+            </div>
+
+            <!-- Pestañas Operativas por Etapa -->
+            <lightning-tabset active-tab-value={activeTab} onselect={handleTabSelect}>
+                
+                <lightning-tab label="⚠️ Excepciones de Crédito & Buró" value="excepciones">
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <lightning-tab label="🔍 Recepción & Análisis" value="analisis">
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <lightning-tab label="🏛️ Comité & Supervisión" value="comite">
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <lightning-tab label="📑 Formalización & Pagarés" value="formalizacion">
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <lightning-tab label="📂 Mis Solicitudes / Turno" value="mis_casos">
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <lightning-tab label="🌐 Todas las Solicitudes" value="todos">
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+            </lightning-tabset>
+
+        </div>
+    </lightning-card>
+</template>
