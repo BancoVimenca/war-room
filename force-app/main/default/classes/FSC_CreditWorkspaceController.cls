@@ -7,6 +7,8 @@ public with sharing class FSC_CreditWorkspaceController {
 		@AuraEnabled public Integer comiteSupervision { get; set; }
 		@AuraEnabled public Integer formalizacionCustodia { get; set; }
 		@AuraEnabled public Decimal montoTotalCartera { get; set; }
+		@AuraEnabled public Decimal montoGanado { get; set; }
+		@AuraEnabled public Decimal montoPerdido { get; set; }
 		@AuraEnabled public Boolean isAdministrator { get; set; }
 
 		public WorkspaceMetrics() {
@@ -16,6 +18,8 @@ public with sharing class FSC_CreditWorkspaceController {
 			this.comiteSupervision = 0;
 			this.formalizacionCustodia = 0;
 			this.montoTotalCartera = 0.0;
+			this.montoGanado = 0.0;
+			this.montoPerdido = 0.0;
 			this.isAdministrator = false;
 		}
 	}
@@ -166,7 +170,32 @@ public with sharing class FSC_CreditWorkspaceController {
 			metrics.misPendientesDirectos = globalPendingCount > 0 ? globalPendingCount : metrics.misPendientesDirectos;
 		}
 
-		metrics.montoTotalCartera = sumaMonto;
+		// 3. Montos por estado (En Proceso, Ganado, Perdido)
+		Decimal sumaMontoEnProceso = 0.0;
+		Decimal sumaMontoGanado = 0.0;
+		Decimal sumaMontoPerdido = 0.0;
+
+		List<ResidentialLoanApplication> todasSolicitudes = [
+			SELECT Id, FSC_Monto__c, Status
+			FROM ResidentialLoanApplication
+			WITH USER_MODE
+			LIMIT 1000
+		];
+
+		for (ResidentialLoanApplication r : todasSolicitudes) {
+			Decimal m = r.FSC_Monto__c != null ? r.FSC_Monto__c : 0.0;
+			if (r.Status == 'En proceso') {
+				sumaMontoEnProceso += m;
+			} else if (r.Status == 'Cerrada Ganada') {
+				sumaMontoGanado += m;
+			} else if (r.Status == 'Cerrada Perdida') {
+				sumaMontoPerdido += m;
+			}
+		}
+
+		metrics.montoTotalCartera = sumaMontoEnProceso;
+		metrics.montoGanado = sumaMontoGanado;
+		metrics.montoPerdido = sumaMontoPerdido;
 		return metrics;
 	}
 
