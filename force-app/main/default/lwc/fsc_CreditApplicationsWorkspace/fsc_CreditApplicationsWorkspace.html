@@ -131,9 +131,9 @@
             </div>
 
             <!-- Pestañas Operativas por Etapa -->
-            <lightning-tabset active-tab-value={activeTab} onselect={handleTabSelect}>
+            <lightning-tabset active-tab-value={activeTab}>
                 
-                <lightning-tab label="⚠️ Excepciones de Crédito & Buró" value="excepciones">
+                <lightning-tab label="⚠️ Excepciones de Crédito & Buró" value="excepciones" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -152,7 +152,7 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="🔍 Recepción & Análisis" value="analisis">
+                <lightning-tab label="🔍 Recepción & Análisis" value="analisis" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -171,7 +171,7 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="🏛️ Comité & Supervisión" value="comite">
+                <lightning-tab label="🏛️ Comité & Supervisión" value="comite" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -190,7 +190,7 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="📑 Formalización & Pagarés" value="formalizacion">
+                <lightning-tab label="📑 Formalización & Pagarés" value="formalizacion" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -209,7 +209,7 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="📂 Mis Solicitudes / Turno" value="mis_casos">
+                <lightning-tab label="📂 Mis Solicitudes / Turno" value="mis_casos" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -228,7 +228,7 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="🌐 Todas las Solicitudes" value="todos">
+                <lightning-tab label="🌐 Todas las Solicitudes" value="todos" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
