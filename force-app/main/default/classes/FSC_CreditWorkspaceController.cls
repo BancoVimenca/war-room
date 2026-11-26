@@ -39,6 +39,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		@AuraEnabled public String subestado { get; set; }
 		@AuraEnabled public String ownerName { get; set; }
 		@AuraEnabled public Datetime createdDate { get; set; }
+		@AuraEnabled public Datetime fechaSubestado { get; set; }
 		@AuraEnabled public Boolean tieneExcepcion { get; set; }
 		@AuraEnabled public String detalleExcepcion { get; set; }
 		@AuraEnabled public String turnoActual { get; set; }
@@ -297,6 +298,26 @@ public with sharing class FSC_CreditWorkspaceController {
 
 		List<ResidentialLoanApplication> records = Database.query(query, AccessLevel.USER_MODE);
 
+		// Obtener fecha en que cada solicitud entró a su subestado actual vía historial
+		Set<Id> recordIds = new Set<Id>();
+		for (ResidentialLoanApplication r : records) {
+			recordIds.add(r.Id);
+		}
+
+		Map<Id, Datetime> fechaSubestadoMap = new Map<Id, Datetime>();
+		if (!recordIds.isEmpty()) {
+			for (ResidentialLoanApplicationHistory h : [
+				SELECT ResidentialLoanApplicationId, CreatedDate
+				FROM ResidentialLoanApplicationHistory
+				WHERE ResidentialLoanApplicationId IN :recordIds
+				AND Field = 'FSC_Subestado__c'
+				WITH SYSTEM_MODE
+				ORDER BY CreatedDate ASC
+			]) {
+				fechaSubestadoMap.put(h.ResidentialLoanApplicationId, h.CreatedDate);
+			}
+		}
+
 		for (ResidentialLoanApplication rla : records) {
 			CreditApplicationRow row = new CreditApplicationRow();
 			row.recordId = rla.Id;
@@ -305,12 +326,26 @@ public with sharing class FSC_CreditWorkspaceController {
 			row.recordUrl = '/' + rla.Id;
 			row.accountId = rla.AccountId;
 			row.accountName = rla.Account != null ? rla.Account.Name : '-';
-			row.productType = rla.RecordType != null ? rla.RecordType.Name : 'Préstamo';
+			
+			// Limpiar texto 'Solicitud de ' para dejar solo el producto
+			String rawType = rla.RecordType != null ? rla.RecordType.Name : 'Crédito';
+			if (rawType.toLowerCase().startsWith('solicitud de ')) {
+				rawType = rawType.substring(13).trim();
+			}
+			row.productType = rawType.capitalize();
+
 			row.monto = rla.FSC_Monto__c != null ? rla.FSC_Monto__c : 0.0;
 			row.status = rla.Status;
 			row.subestado = rla.FSC_Subestado__c;
 			row.ownerName = rla.Owner != null ? rla.Owner.Name : '-';
 			row.createdDate = rla.CreatedDate;
+
+			// Fecha en que entró al subestado actual (fallback a CreatedDate si no hubo cambio previo)
+			if (fechaSubestadoMap.containsKey(rla.Id)) {
+				row.fechaSubestado = fechaSubestadoMap.get(rla.Id);
+			} else {
+				row.fechaSubestado = rla.CreatedDate;
+			}
 
 			// Evaluar excepciones
 			Boolean tieneBuro = (rla.FSC_SolicitaExcepcionParaRechazoDeBuro__c == true);
