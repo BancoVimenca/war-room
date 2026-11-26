@@ -137,6 +137,27 @@ private class FSC_CreditWorkspaceControllerTest {
 
 		List<FSC_CreditWorkspaceController.CreditApplicationRow> misCasosAnalista =
 			FSC_CreditWorkspaceController.getCreditApplications('mis_casos', '', 'ANALISTA');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> aprobacionesAdmin =
+			FSC_CreditWorkspaceController.getCreditApplications('aprobaciones', '', 'ADMIN_ALL');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> aprobacionesUser =
+			FSC_CreditWorkspaceController.getCreditApplications('aprobaciones', '', '');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> recepcionRows =
+			FSC_CreditWorkspaceController.getCreditApplications('recepcion', '', 'OFICIAL');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> pagaresRows =
+			FSC_CreditWorkspaceController.getCreditApplications('pagares', '', 'FORMALIZACION');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> firmasRows =
+			FSC_CreditWorkspaceController.getCreditApplications('firmas', '', 'FORMALIZACION');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> desembolsoRows =
+			FSC_CreditWorkspaceController.getCreditApplications('desembolso', '', 'FORMALIZACION');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> finalizadasRows =
+			FSC_CreditWorkspaceController.getCreditApplications('finalizadas', '', 'ADMIN_ALL');
 		Test.stopTest();
 
 		Assert.isFalse(allRows.isEmpty(), 'Debe retornar filas en la pestaña general');
@@ -146,5 +167,26 @@ private class FSC_CreditWorkspaceControllerTest {
 		Assert.isFalse(formalizacionRows.isEmpty(), 'Debe retornar solicitudes de formalizacion');
 		Assert.isFalse(misCasosAdmin.isEmpty(), 'Admin en modo ALL debe ver casos activos');
 		Assert.isFalse(misCasosAnalista.isEmpty(), 'Analista debe ver sus casos asignados');
+		Assert.isNotNull(aprobacionesAdmin, 'Aprobaciones admin no debe ser nulo');
+		Assert.isNotNull(aprobacionesUser, 'Aprobaciones user no debe ser nulo');
+	}
+
+	@IsTest
+	static void testProcessApprovalDecisionValidation() {
+		Test.startTest();
+		try {
+			FSC_CreditWorkspaceController.processApprovalDecision(null, 'Approve', 'Comentario prueba');
+			Assert.fail('Debió lanzar excepción por workitemId nulo');
+		} catch (AuraHandledException e) {
+			Assert.isNotNull(e.getMessage());
+		}
+
+		try {
+			FSC_CreditWorkspaceController.processApprovalDecision('04i000000000001AAA', 'AccionInvalida', 'Comentario prueba');
+			Assert.fail('Debió lanzar excepción por acción inválida');
+		} catch (AuraHandledException e) {
+			Assert.isNotNull(e.getMessage());
+		}
+		Test.stopTest();
 	}
 }
