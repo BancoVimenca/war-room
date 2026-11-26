@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>FSC_Bandeja_Creditos_Page</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>FSC_Bandeja_Creditos_Page</members>
+        <name>CustomTab</name>
+    </types>
+    <version>65.0</version>
+</Package>
