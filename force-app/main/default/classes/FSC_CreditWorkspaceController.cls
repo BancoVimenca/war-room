@@ -215,19 +215,9 @@ public with sharing class FSC_CreditWorkspaceController {
 
 		Set<Id> targetActorIds = resolveTargetActorIds(currentUserId, effectiveRole);
 
-		// Mapear aprobaciones activas por TargetObjectId
-		Map<Id, ProcessInstanceWorkitem> workitemsByTarget = new Map<Id, ProcessInstanceWorkitem>();
-		for (ProcessInstanceWorkitem item : [
-			SELECT Id, ProcessInstance.TargetObjectId, Actor.Name, OriginalActor.Name, ActorId
-			FROM ProcessInstanceWorkitem
-			WITH SYSTEM_MODE
-			LIMIT 1000
-		]) {
-			workitemsByTarget.put(item.ProcessInstance.TargetObjectId, item);
-		}
-
-		// Mapear excepciones de crédito pendientes (FSC_Excepcion__c)
+		// Mapear excepciones de crédito pendientes (FSC_Excepcion__c) y relacionar con la solicitud
 		Map<Id, List<FSC_Excepcion__c>> excepcionesBySolicitud = new Map<Id, List<FSC_Excepcion__c>>();
+		Map<Id, Id> solicitudIdByExcepcionId = new Map<Id, Id>();
 		for (FSC_Excepcion__c exc : [
 			SELECT Id, FSC_Solicitud_Prestamo__c, FSC_Tipo__c, FSC_Detalle__c, FSC_Estado__c
 			FROM FSC_Excepcion__c
@@ -236,10 +226,30 @@ public with sharing class FSC_CreditWorkspaceController {
 			LIMIT 1000
 		]) {
 			if (exc.FSC_Solicitud_Prestamo__c != null) {
+				solicitudIdByExcepcionId.put(exc.Id, exc.FSC_Solicitud_Prestamo__c);
 				if (!excepcionesBySolicitud.containsKey(exc.FSC_Solicitud_Prestamo__c)) {
 					excepcionesBySolicitud.put(exc.FSC_Solicitud_Prestamo__c, new List<FSC_Excepcion__c>());
 				}
 				excepcionesBySolicitud.get(exc.FSC_Solicitud_Prestamo__c).add(exc);
+			}
+		}
+
+		// Mapear aprobaciones activas por TargetObjectId (RLA o Excepción)
+		Map<Id, ProcessInstanceWorkitem> workitemsByTarget = new Map<Id, ProcessInstanceWorkitem>();
+		for (ProcessInstanceWorkitem item : [
+			SELECT Id, ProcessInstance.TargetObjectId, Actor.Name, OriginalActor.Name, ActorId
+			FROM ProcessInstanceWorkitem
+			WITH SYSTEM_MODE
+			LIMIT 1000
+		]) {
+			Id targetId = item.ProcessInstance.TargetObjectId;
+			workitemsByTarget.put(targetId, item);
+			// Si el target es una excepción hija pendiente, mapear también hacia la solicitud principal
+			if (solicitudIdByExcepcionId.containsKey(targetId)) {
+				Id rlaId = solicitudIdByExcepcionId.get(targetId);
+				if (!workitemsByTarget.containsKey(rlaId)) {
+					workitemsByTarget.put(rlaId, item);
+				}
 			}
 		}
 
@@ -260,7 +270,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		} else if (tabName == 'analisis') {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Análisis de crédito\', \'Banca Seguro\') ';
 		} else if (tabName == 'comite') {
-			filterCondition = 'AND (FSC_DebeRevisarComite__c = true OR FSC_DebeRevisarSupervisor__c = true OR FSC_SolicitaExcepcionParaRechazoDeBuro__c = true OR Id IN :targetExceptionRlaIds) ';
+			filterCondition = 'AND Status = \'En proceso\' AND (Id IN :targetExceptionRlaIds OR FSC_DebeRevisarComite__c = true OR FSC_DebeRevisarSupervisor__c = true) ';
 		} else if (tabName == 'pagares') {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Generación de pagarés y plantillas\', \'Generación de contrato\', \'Documentación para contratos\') ';
 		} else if (tabName == 'firmas') {
@@ -401,7 +411,20 @@ public with sharing class FSC_CreditWorkspaceController {
 				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'OFICIAL_NEGOCIO');
 			}
 		}
-		else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito') {
+		else if (sub == 'Recepción de documentos – Análisis') {
+			// Si no tiene analista asignado, el turno sigue siendo del Oficial de Negocio para completar recaudos
+			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
+				turno = rla.FSC_UsuarioAnalista__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
+			} else if (rla.Owner != null) {
+				turno = rla.Owner.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId || effectiveRole == 'OFICIAL_NEGOCIO');
+			} else {
+				turno = 'Oficial de Negocio';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'OFICIAL_NEGOCIO');
+			}
+		}
+		else if (sub == 'Análisis de crédito') {
 			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
 				turno = rla.FSC_UsuarioAnalista__r.Name;
 				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
@@ -528,15 +551,31 @@ public with sharing class FSC_CreditWorkspaceController {
 	}
 
 	private static Set<Id> getUserGroupIds(Id userId) {
-		Set<Id> groupIds = new Set<Id>();
-		for (GroupMember gm : [
-			SELECT GroupId
-			FROM GroupMember
-			WHERE UserOrGroupId = :userId
-			WITH SYSTEM_MODE
-		]) {
-			groupIds.add(gm.GroupId);
+		Set<Id> currentGroupIds = new Set<Id>{ userId };
+		Set<Id> allGroupIds = new Set<Id>();
+
+		Boolean hasMore = true;
+		Integer depth = 0;
+		while (hasMore && depth < 5) {
+			depth++;
+			Set<Id> nextGroupIds = new Set<Id>();
+			for (GroupMember gm : [
+				SELECT GroupId
+				FROM GroupMember
+				WHERE UserOrGroupId IN :currentGroupIds
+				WITH SYSTEM_MODE
+			]) {
+				if (!allGroupIds.contains(gm.GroupId)) {
+					allGroupIds.add(gm.GroupId);
+					nextGroupIds.add(gm.GroupId);
+				}
+			}
+			if (nextGroupIds.isEmpty()) {
+				hasMore = false;
+			} else {
+				currentGroupIds = nextGroupIds;
+			}
 		}
-		return groupIds;
+		return allGroupIds;
 	}
 }
