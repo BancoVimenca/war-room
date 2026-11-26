@@ -76,35 +76,34 @@ public with sharing class FSC_CreditWorkspaceController {
 		String effectiveRole = (isAdmin && String.isNotBlank(simulatedRole)) ? simulatedRole : 'REAL_USER';
 		Set<Id> targetActorIds = resolveTargetActorIds(currentUserId, effectiveRole);
 
-		// 1. Pendientes directos vía ProcessInstanceWorkitem
-		List<ProcessInstanceWorkitem> pendingItems = [
-			SELECT Id, ProcessInstance.TargetObjectId, ActorId
-			FROM ProcessInstanceWorkitem
-			WITH SYSTEM_MODE
-			LIMIT 1000
-		];
-
-		Set<Id> directPendingTargetIds = new Set<Id>();
-		Integer globalPendingCount = 0;
-		for (ProcessInstanceWorkitem item : pendingItems) {
-			globalPendingCount++;
-			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(item.ActorId)) {
-				directPendingTargetIds.add(item.ProcessInstance.TargetObjectId);
-			}
-		}
-
-		// 2. Conteo de Excepciones de Crédito activas (FSC_Excepcion__c)
-		List<FSC_Excepcion__c> excepcionesPendientes = [
+		// 1. Mapear excepciones de crédito activas (FSC_Excepcion__c) y vincular con solicitud principal
+		Map<Id, Id> solicitudIdByExcepcionId = new Map<Id, Id>();
+		Set<Id> solicitudesConExcepcionHija = new Set<Id>();
+		for (FSC_Excepcion__c exc : [
 			SELECT Id, FSC_Solicitud_Prestamo__c
 			FROM FSC_Excepcion__c
 			WHERE FSC_Estado__c = 'Pendiente'
 			WITH USER_MODE
 			LIMIT 500
-		];
-		Set<Id> solicitudesConExcepcionHija = new Set<Id>();
-		for (FSC_Excepcion__c exc : excepcionesPendientes) {
+		]) {
 			if (exc.FSC_Solicitud_Prestamo__c != null) {
+				solicitudIdByExcepcionId.put(exc.Id, exc.FSC_Solicitud_Prestamo__c);
 				solicitudesConExcepcionHija.add(exc.FSC_Solicitud_Prestamo__c);
+			}
+		}
+
+		// 2. Pendientes directos vía ProcessInstanceWorkitem
+		Set<Id> userActionableRlaIds = new Set<Id>();
+		for (ProcessInstanceWorkitem item : [
+			SELECT Id, ProcessInstance.TargetObjectId, ActorId
+			FROM ProcessInstanceWorkitem
+			WITH SYSTEM_MODE
+			LIMIT 1000
+		]) {
+			Id targetId = item.ProcessInstance.TargetObjectId;
+			Id rlaId = solicitudIdByExcepcionId.containsKey(targetId) ? solicitudIdByExcepcionId.get(targetId) : targetId;
+			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(item.ActorId)) {
+				userActionableRlaIds.add(rlaId);
 			}
 		}
 
@@ -132,20 +131,31 @@ public with sharing class FSC_CreditWorkspaceController {
 				metrics.excepcionesActivas++;
 			}
 
-			// Directo
-			Id assignedStageUserId = getAssignedUserForSubstatus(rla);
-			if (effectiveRole == 'ADMIN_ALL') {
-				if (directPendingTargetIds.contains(rla.Id) || assignedStageUserId != null) {
-					metrics.misPendientesDirectos++;
+			// Directo / Mis Pendientes
+			Boolean isDirectActionable = userActionableRlaIds.contains(rla.Id);
+			if (!isDirectActionable) {
+				String sub = rla.FSC_Subestado__c;
+				if (effectiveRole == 'ADMIN_ALL') {
+					isDirectActionable = true;
+				} else if (rla.OwnerId == currentUserId && (sub == 'En Motor Buró' || sub == 'En validación PEP/Listas' || sub == 'Recepción de documentos – Análisis' || sub == 'Gestionar firmas')) {
+					isDirectActionable = true;
+				} else if (targetActorIds.contains(rla.FSC_UsuarioAnalista__c) && sub == 'Análisis de crédito') {
+					isDirectActionable = true;
+				} else if (targetActorIds.contains(rla.FSC_UsuarioSupervisor__c) && rla.FSC_DebeRevisarSupervisor__c == true) {
+					isDirectActionable = true;
+				} else if (targetActorIds.contains(rla.FSC_UsuarioComite__c) && rla.FSC_DebeRevisarComite__c == true) {
+					isDirectActionable = true;
+				} else if (targetActorIds.contains(rla.FSC_UsuarioPagaresYContratos__c) && (sub == 'Generación de pagarés y plantillas' || sub == 'Generación de contrato' || sub == 'Documentación para contratos')) {
+					isDirectActionable = true;
+				} else if (targetActorIds.contains(rla.FSC_UsuarioFormalizacion__c) && (sub == 'Gestionar firmas' || sub == 'Formalización')) {
+					isDirectActionable = true;
+				} else if (targetActorIds.contains(rla.FSC_UsuarioGestionPlanilla__c) && (sub == 'Recepción Docs Desembolso' || sub == 'Archivo y custodia')) {
+					isDirectActionable = true;
 				}
-			} else if (effectiveRole == 'OFICIAL') {
-				if (rla.OwnerId == currentUserId && (directPendingTargetIds.contains(rla.Id) || rla.FSC_Subestado__c == 'Gestionar firmas')) {
-					metrics.misPendientesDirectos++;
-				}
-			} else {
-				if (directPendingTargetIds.contains(rla.Id) || (assignedStageUserId != null && targetActorIds.contains(assignedStageUserId))) {
-					metrics.misPendientesDirectos++;
-				}
+			}
+
+			if (isDirectActionable) {
+				metrics.misPendientesDirectos++;
 			}
 
 			// Etapa Recepción, Buró y PEP
@@ -171,10 +181,6 @@ public with sharing class FSC_CreditWorkspaceController {
 			    rla.FSC_Subestado__c == 'Archivo y custodia') {
 				metrics.formalizacionCustodia++;
 			}
-		}
-
-		if (effectiveRole == 'ADMIN_ALL') {
-			metrics.misPendientesDirectos = globalPendingCount > 0 ? globalPendingCount : metrics.misPendientesDirectos;
 		}
 
 		// 3. Montos por estado (En Proceso, Ganado, Perdido)
@@ -235,7 +241,10 @@ public with sharing class FSC_CreditWorkspaceController {
 		}
 
 		// Mapear aprobaciones activas por TargetObjectId (RLA o Excepción)
+		// Priorizar siempre el ítem donde el actor coincida con los grupos/usuario del usuario en sesión
 		Map<Id, ProcessInstanceWorkitem> workitemsByTarget = new Map<Id, ProcessInstanceWorkitem>();
+		Set<Id> userActionableRlaIds = new Set<Id>();
+
 		for (ProcessInstanceWorkitem item : [
 			SELECT Id, ProcessInstance.TargetObjectId, Actor.Name, OriginalActor.Name, ActorId
 			FROM ProcessInstanceWorkitem
@@ -243,13 +252,18 @@ public with sharing class FSC_CreditWorkspaceController {
 			LIMIT 1000
 		]) {
 			Id targetId = item.ProcessInstance.TargetObjectId;
-			workitemsByTarget.put(targetId, item);
-			// Si el target es una excepción hija pendiente, mapear también hacia la solicitud principal
-			if (solicitudIdByExcepcionId.containsKey(targetId)) {
-				Id rlaId = solicitudIdByExcepcionId.get(targetId);
-				if (!workitemsByTarget.containsKey(rlaId)) {
-					workitemsByTarget.put(rlaId, item);
-				}
+			Id rlaId = solicitudIdByExcepcionId.containsKey(targetId) ? solicitudIdByExcepcionId.get(targetId) : targetId;
+
+			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(item.ActorId)) {
+				userActionableRlaIds.add(rlaId);
+			}
+
+			// Prioridad de mapeo para mostrar el actor en la tabla
+			if (!workitemsByTarget.containsKey(rlaId) || targetActorIds.contains(item.ActorId)) {
+				workitemsByTarget.put(rlaId, item);
+			}
+			if (targetId != rlaId && (!workitemsByTarget.containsKey(targetId) || targetActorIds.contains(item.ActorId))) {
+				workitemsByTarget.put(targetId, item);
 			}
 		}
 
@@ -263,6 +277,8 @@ public with sharing class FSC_CreditWorkspaceController {
 		               'FSC_UsuarioFormalizacion__c, FSC_UsuarioFormalizacion__r.Name, ' +
 		               'FSC_UsuarioGestionPlanilla__c, FSC_UsuarioGestionPlanilla__r.Name ' +
 		               'FROM ResidentialLoanApplication WHERE Status != null ';
+
+		Set<Id> targetExceptionRlaIds = excepcionesBySolicitud.keySet();
 
 		String filterCondition = '';
 		if (tabName == 'recepcion') {
@@ -282,18 +298,17 @@ public with sharing class FSC_CreditWorkspaceController {
 		} else if (tabName == 'mis_casos') {
 			if (effectiveRole == 'ADMIN_ALL') {
 				filterCondition = 'AND Status = \'En proceso\' ';
-			} else if (effectiveRole == 'OFICIAL') {
-				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds) ';
 			} else {
-				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds OR FSC_UsuarioAnalista__c IN :targetActorIds OR FSC_UsuarioSupervisor__c IN :targetActorIds OR FSC_UsuarioComite__c IN :targetActorIds OR FSC_UsuarioPagaresYContratos__c IN :targetActorIds OR FSC_UsuarioFormalizacion__c IN :targetActorIds OR FSC_UsuarioGestionPlanilla__c IN :targetActorIds) ';
-			}
-		}
-
-		Set<Id> targetExceptionRlaIds = excepcionesBySolicitud.keySet();
-		Set<Id> userActionableRlaIds = new Set<Id>();
-		for (ProcessInstanceWorkitem piw : workitemsByTarget.values()) {
-			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId)) {
-				userActionableRlaIds.add(piw.ProcessInstance.TargetObjectId);
+				filterCondition = 'AND Status = \'En proceso\' AND (' +
+					'Id IN :userActionableRlaIds ' +
+					'OR (OwnerId = :currentUserId AND FSC_Subestado__c IN (\'En Motor Buró\', \'En validación PEP/Listas\', \'Recepción de documentos – Análisis\', \'Gestionar firmas\')) ' +
+					'OR (FSC_UsuarioAnalista__c IN :targetActorIds AND FSC_Subestado__c = \'Análisis de crédito\') ' +
+					'OR (FSC_UsuarioSupervisor__c IN :targetActorIds AND FSC_DebeRevisarSupervisor__c = true) ' +
+					'OR (FSC_UsuarioComite__c IN :targetActorIds AND FSC_DebeRevisarComite__c = true) ' +
+					'OR (FSC_UsuarioPagaresYContratos__c IN :targetActorIds AND FSC_Subestado__c IN (\'Generación de pagarés y plantillas\', \'Generación de contrato\', \'Documentación para contratos\')) ' +
+					'OR (FSC_UsuarioFormalizacion__c IN :targetActorIds AND FSC_Subestado__c IN (\'Gestionar firmas\', \'Formalización\')) ' +
+					'OR (FSC_UsuarioGestionPlanilla__c IN :targetActorIds AND FSC_Subestado__c IN (\'Recepción Docs Desembolso\', \'Archivo y custodia\'))' +
+				') ';
 			}
 		}
 
@@ -412,11 +427,8 @@ public with sharing class FSC_CreditWorkspaceController {
 			}
 		}
 		else if (sub == 'Recepción de documentos – Análisis') {
-			// Si no tiene analista asignado, el turno sigue siendo del Oficial de Negocio para completar recaudos
-			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
-				turno = rla.FSC_UsuarioAnalista__r.Name;
-				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
-			} else if (rla.Owner != null) {
+			// El turno corresponde al Oficial de Negocio para completar y cargar los recaudos requeridos
+			if (rla.Owner != null) {
 				turno = rla.Owner.Name;
 				esAccionable = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId || effectiveRole == 'OFICIAL_NEGOCIO');
 			} else {
@@ -478,28 +490,6 @@ public with sharing class FSC_CreditWorkspaceController {
 
 		row.turnoActual = turno;
 		row.esAccionablePorUsuario = esAccionable;
-	}
-
-	private static Id getAssignedUserForSubstatus(ResidentialLoanApplication rla) {
-		String sub = rla.FSC_Subestado__c;
-		if (sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
-			return rla.OwnerId;
-		} else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito') {
-			return rla.FSC_UsuarioAnalista__c;
-		} else if (sub == 'Generación de pagarés y plantillas') {
-			return rla.FSC_UsuarioPagaresYContratos__c;
-		} else if (sub == 'Gestionar firmas') {
-			return rla.FSC_UsuarioFormalizacion__c != null ? rla.FSC_UsuarioFormalizacion__c : rla.OwnerId;
-		} else if (sub == 'Recepción Docs Desembolso' || sub == 'Archivo y custodia') {
-			return rla.FSC_UsuarioGestionPlanilla__c;
-		}
-		if (rla.FSC_DebeRevisarComite__c == true) {
-			return rla.FSC_UsuarioComite__c;
-		}
-		if (rla.FSC_DebeRevisarSupervisor__c == true) {
-			return rla.FSC_UsuarioSupervisor__c;
-		}
-		return null;
 	}
 
 	private static Boolean checkIsAdminUser() {
