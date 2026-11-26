@@ -43,7 +43,7 @@
             <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_small">
                 
                 <!-- KPI 1: Mis Pendientes Directos -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Aprobaciones directas pendientes asignadas a ti o a las colas del rol">Mis Pendientes</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #c23934;">
@@ -54,7 +54,7 @@
                 </div>
 
                 <!-- KPI 2: Excepciones Activas -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Solicitudes con excepciones de Buró o de Negocios en trámite">Excepciones</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #ea8a00;">
@@ -64,19 +64,30 @@
                     </div>
                 </div>
 
-                <!-- KPI 3: En Recepción & Análisis -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
+                <!-- KPI 3: Recepción & Buró -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos en validación PEP, Motor Buró o Análisis de Riesgo">En Análisis</div>
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos en validación PEP, Motor Buró o Recepción">Recepción & Buró</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0176d3;">
-                            <strong>{metrics.enAnalisis}</strong>
+                            <strong>{metrics.enRecepcion}</strong>
                         </div>
-                        <div class="slds-text-body_small slds-text-color_weak">Riesgo & Buró</div>
+                        <div class="slds-text-body_small slds-text-color_weak">Entrada & Filtros</div>
                     </div>
                 </div>
 
-                <!-- KPI 4: Comité & Supervisión -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
+                <!-- KPI 4: Análisis de Crédito -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos en Análisis de Crédito formal por la mesa de riesgo">Análisis Crédito</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0284c7;">
+                            <strong>{metrics.enAnalisis}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">Evaluación Riesgo</div>
+                    </div>
+                </div>
+
+                <!-- KPI 5: Comité & Supervisión -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Casos escalados a comités de crédito o supervisores">Comité / Sup.</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #5b21b6;">
@@ -86,8 +97,8 @@
                     </div>
                 </div>
 
-                <!-- KPI 5: Formalización & Custodia -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
+                <!-- KPI 6: Formalización & Custodia -->
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Generación de pagarés, firmas y archivo de valores">Formalización</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0b827c;">
@@ -179,7 +190,26 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="🔍 Recepción & Análisis" value="analisis" onactive={handleTabActive}>
+                <lightning-tab label="📥 Recepción & Buró" value="recepcion" onactive={handleTabActive}>
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <lightning-tab label="🔍 Análisis de Crédito" value="analisis" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
