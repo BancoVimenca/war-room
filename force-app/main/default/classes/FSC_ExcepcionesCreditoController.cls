@@ -53,7 +53,9 @@ public with sharing class FSC_ExcepcionesCreditoController {
 		String aprobadorActual = null;
 		if (hasActiveApproval) {
 			ProcessInstanceWorkitem firstWi = selectedWorkItems[0];
-			aprobadorActual = String.isNotBlank(firstWi.Actor?.Name) ? firstWi.Actor.Name : firstWi.OriginalActor?.Name;
+			Id actorId = firstWi.ActorId != null ? firstWi.ActorId : firstWi.OriginalActorId;
+			String baseName = String.isNotBlank(firstWi.Actor?.Name) ? firstWi.Actor.Name : firstWi.OriginalActor?.Name;
+			aprobadorActual = formatAprobador(actorId, baseName);
 		}
 		Boolean autorizadoSolicitud = isOficialOAdministrador();
 		Boolean tienePendientes = hasPendingException(excepciones);
@@ -317,6 +319,64 @@ public with sharing class FSC_ExcepcionesCreditoController {
 		if (!isOficialOAdministrador()) {
 			throw new AuraHandledException('Solo el oficial de negocio o un administrador puede realizar esta acción.');
 		}
+	}
+
+	@TestVisible
+	private static String formatAprobador(Id actorId, String baseName) {
+		if (String.isBlank(baseName)) {
+			return null;
+		}
+		if (actorId == null || String.valueOf(actorId).startsWith('005')) {
+			return baseName;
+		}
+
+		Set<Id> userIds = new Set<Id>();
+		Set<Id> groupIdsToInspect = new Set<Id>{ actorId };
+		for (GroupMember gm : [
+			SELECT GroupId, UserOrGroupId
+			FROM GroupMember
+			WHERE GroupId IN :groupIdsToInspect
+			WITH SYSTEM_MODE
+		]) {
+			if (String.valueOf(gm.UserOrGroupId).startsWith('005')) {
+				userIds.add(gm.UserOrGroupId);
+			} else if (String.valueOf(gm.UserOrGroupId).startsWith('00G')) {
+				groupIdsToInspect.add(gm.UserOrGroupId);
+			}
+		}
+
+		if (!groupIdsToInspect.isEmpty()) {
+			for (GroupMember gm : [
+				SELECT UserOrGroupId
+				FROM GroupMember
+				WHERE GroupId IN :groupIdsToInspect
+				WITH SYSTEM_MODE
+			]) {
+				if (String.valueOf(gm.UserOrGroupId).startsWith('005')) {
+					userIds.add(gm.UserOrGroupId);
+				}
+			}
+		}
+
+		if (userIds.isEmpty()) {
+			return baseName;
+		}
+
+		List<String> userNames = new List<String>();
+		for (User u : [
+			SELECT Name
+			FROM User
+			WHERE Id IN :userIds AND IsActive = true
+			WITH SYSTEM_MODE
+			ORDER BY Name
+		]) {
+			userNames.add(u.Name);
+		}
+
+		if (userNames.isEmpty()) {
+			return baseName;
+		}
+		return baseName + ' (' + String.join(userNames, ', ') + ')';
 	}
 
 	private static Boolean isOficialOAdministrador() {
