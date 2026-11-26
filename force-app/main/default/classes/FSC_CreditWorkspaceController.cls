@@ -391,7 +391,17 @@ public with sharing class FSC_CreditWorkspaceController {
 			esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId));
 		}
 		// 2. Jerarquía por Subestado operativo de la Solicitud
-		else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito' || sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
+		else if (sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
+			// En validación de Buró o Listas, el turno operativo corresponde al Oficial de Negocio (Owner) para validar/reintentar o solicitar excepción
+			if (rla.Owner != null) {
+				turno = rla.Owner.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId || effectiveRole == 'OFICIAL_NEGOCIO');
+			} else {
+				turno = 'Oficial de Negocio';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'OFICIAL_NEGOCIO');
+			}
+		}
+		else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito') {
 			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
 				turno = rla.FSC_UsuarioAnalista__r.Name;
 				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
@@ -449,7 +459,9 @@ public with sharing class FSC_CreditWorkspaceController {
 
 	private static Id getAssignedUserForSubstatus(ResidentialLoanApplication rla) {
 		String sub = rla.FSC_Subestado__c;
-		if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito' || sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
+		if (sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
+			return rla.OwnerId;
+		} else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito') {
 			return rla.FSC_UsuarioAnalista__c;
 		} else if (sub == 'Generación de pagarés y plantillas') {
 			return rla.FSC_UsuarioPagaresYContratos__c;
