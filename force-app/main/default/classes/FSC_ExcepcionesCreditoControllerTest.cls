@@ -273,6 +273,28 @@ private class FSC_ExcepcionesCreditoControllerTest {
 		Test.stopTest();
 	}
 
+	@IsTest
+	static void shouldFormatApproverProperlyForUserAndQueue() {
+		User currentUser = [SELECT Id, Name FROM User WHERE Id = :UserInfo.getUserId()];
+		String userFormatted = FSC_ExcepcionesCreditoController.formatAprobador(currentUser.Id, currentUser.Name);
+		Assert.areEqual(currentUser.Name, userFormatted, 'Para un usuario directo debe devolver su nombre sin modificar.');
+
+		Group testGroup = new Group(Name = 'Grupo Test Excepcion', Type = 'Regular');
+		insert testGroup;
+		insert new GroupMember(GroupId = testGroup.Id, UserOrGroupId = currentUser.Id);
+
+		Group testQueue = new Group(Name = 'Cola Test Excepcion', Type = 'Queue');
+		insert testQueue;
+		insert new GroupMember(GroupId = testQueue.Id, UserOrGroupId = testGroup.Id);
+
+		String queueFormatted = FSC_ExcepcionesCreditoController.formatAprobador(testQueue.Id, 'Cola Test Excepcion');
+		Assert.isTrue(queueFormatted.contains('Cola Test Excepcion'), 'Debe incluir el nombre base de la cola.');
+		Assert.isTrue(queueFormatted.contains(currentUser.Name), 'Debe incluir el nombre del usuario miembro.');
+
+		String nullFormatted = FSC_ExcepcionesCreditoController.formatAprobador(null, null);
+		Assert.isNull(nullFormatted, 'Para base nula debe retornar null.');
+	}
+
 	private static void forceAuthorization() {
 		FSC_ExcepcionesCreditoController.testForceAuthorized = true;
 		FSC_ExcepcionApprovalService.testForceAuthorized = true;
