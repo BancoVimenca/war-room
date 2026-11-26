@@ -65,9 +65,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		Boolean isAdmin = checkIsAdminUser();
 		metrics.isAdministrator = isAdmin;
 
-		// Si no es admin, ignorar el rol simulado y usar identidad real
 		String effectiveRole = (isAdmin && String.isNotBlank(simulatedRole)) ? simulatedRole : 'REAL_USER';
-
 		Set<Id> targetActorIds = resolveTargetActorIds(currentUserId, effectiveRole);
 
 		// 1. Pendientes directos vía ProcessInstanceWorkitem
@@ -105,7 +103,9 @@ public with sharing class FSC_CreditWorkspaceController {
 		// 3. Consultar Solicitudes activas para métricas
 		List<ResidentialLoanApplication> solicitudesActivas = [
 			SELECT Id, Status, FSC_Subestado__c, FSC_Monto__c, FSC_SolicitaExcepcionParaRechazoDeBuro__c,
-			       FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c, OwnerId
+			       FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c, OwnerId,
+			       FSC_UsuarioAnalista__c, FSC_UsuarioSupervisor__c, FSC_UsuarioComite__c,
+			       FSC_UsuarioFormalizacion__c, FSC_UsuarioPagaresYContratos__c, FSC_UsuarioGestionPlanilla__c
 			FROM ResidentialLoanApplication
 			WHERE Status = 'En proceso'
 			WITH USER_MODE
@@ -125,16 +125,17 @@ public with sharing class FSC_CreditWorkspaceController {
 			}
 
 			// Directo
+			Id assignedStageUserId = getAssignedUserForSubstatus(rla);
 			if (effectiveRole == 'ADMIN_ALL') {
-				if (directPendingTargetIds.contains(rla.Id)) {
+				if (directPendingTargetIds.contains(rla.Id) || assignedStageUserId != null) {
 					metrics.misPendientesDirectos++;
 				}
 			} else if (effectiveRole == 'OFICIAL') {
-				if (rla.OwnerId == currentUserId && directPendingTargetIds.contains(rla.Id)) {
+				if (rla.OwnerId == currentUserId && (directPendingTargetIds.contains(rla.Id) || rla.FSC_Subestado__c == 'Gestionar firmas')) {
 					metrics.misPendientesDirectos++;
 				}
 			} else {
-				if (directPendingTargetIds.contains(rla.Id)) {
+				if (directPendingTargetIds.contains(rla.Id) || (assignedStageUserId != null && targetActorIds.contains(assignedStageUserId))) {
 					metrics.misPendientesDirectos++;
 				}
 			}
@@ -161,7 +162,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		}
 
 		if (effectiveRole == 'ADMIN_ALL') {
-			metrics.misPendientesDirectos = globalPendingCount;
+			metrics.misPendientesDirectos = globalPendingCount > 0 ? globalPendingCount : metrics.misPendientesDirectos;
 		}
 
 		metrics.montoTotalCartera = sumaMonto;
@@ -207,7 +208,13 @@ public with sharing class FSC_CreditWorkspaceController {
 
 		String query = 'SELECT Id, Name, AccountId, Account.Name, RecordType.Name, FSC_Monto__c, ' +
 		               'Status, FSC_Subestado__c, OwnerId, Owner.Name, CreatedDate, ' +
-		               'FSC_SolicitaExcepcionParaRechazoDeBuro__c, FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c ' +
+		               'FSC_SolicitaExcepcionParaRechazoDeBuro__c, FSC_DebeRevisarComite__c, FSC_DebeRevisarSupervisor__c, ' +
+		               'FSC_UsuarioAnalista__c, FSC_UsuarioAnalista__r.Name, ' +
+		               'FSC_UsuarioSupervisor__c, FSC_UsuarioSupervisor__r.Name, ' +
+		               'FSC_UsuarioComite__c, FSC_UsuarioComite__r.Name, ' +
+		               'FSC_UsuarioPagaresYContratos__c, FSC_UsuarioPagaresYContratos__r.Name, ' +
+		               'FSC_UsuarioFormalizacion__c, FSC_UsuarioFormalizacion__r.Name, ' +
+		               'FSC_UsuarioGestionPlanilla__c, FSC_UsuarioGestionPlanilla__r.Name ' +
 		               'FROM ResidentialLoanApplication WHERE Status != null ';
 
 		String filterCondition = '';
@@ -221,12 +228,11 @@ public with sharing class FSC_CreditWorkspaceController {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Generación de pagarés y plantillas\', \'Gestionar firmas\', \'Archivo y custodia\') ';
 		} else if (tabName == 'mis_casos') {
 			if (effectiveRole == 'ADMIN_ALL') {
-				// Admin en modo global ve todas las que tienen turno activo o asignadas
 				filterCondition = 'AND Status = \'En proceso\' ';
 			} else if (effectiveRole == 'OFICIAL') {
 				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds) ';
 			} else {
-				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds) ';
+				filterCondition = 'AND (OwnerId = :currentUserId OR Id IN :userActionableRlaIds OR FSC_UsuarioAnalista__c IN :targetActorIds OR FSC_UsuarioSupervisor__c IN :targetActorIds OR FSC_UsuarioComite__c IN :targetActorIds OR FSC_UsuarioPagaresYContratos__c IN :targetActorIds OR FSC_UsuarioFormalizacion__c IN :targetActorIds OR FSC_UsuarioGestionPlanilla__c IN :targetActorIds) ';
 			}
 		}
 
@@ -279,20 +285,108 @@ public with sharing class FSC_CreditWorkspaceController {
 				row.detalleExcepcion = 'Sin excepción';
 			}
 
-			// Turno actual y si es accionable
-			if (workitemsByTarget.containsKey(rla.Id)) {
-				ProcessInstanceWorkitem piw = workitemsByTarget.get(rla.Id);
-				row.turnoActual = piw.Actor != null ? piw.Actor.Name : 'En aprobación';
-				row.esAccionablePorUsuario = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId));
-			} else {
-				row.turnoActual = rla.Owner != null ? rla.Owner.Name : '-';
-				row.esAccionablePorUsuario = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId);
-			}
+			// Resolución Jerárquica de Turno / Responsable por Subestado
+			resolveTurnoResponsable(row, rla, workitemsByTarget, targetActorIds, effectiveRole, currentUserId);
 
 			rows.add(row);
 		}
 
 		return rows;
+	}
+
+	private static void resolveTurnoResponsable(
+		CreditApplicationRow row,
+		ResidentialLoanApplication rla,
+		Map<Id, ProcessInstanceWorkitem> workitemsByTarget,
+		Set<Id> targetActorIds,
+		String effectiveRole,
+		Id currentUserId
+	) {
+		String sub = rla.FSC_Subestado__c;
+		String turno = null;
+		Boolean esAccionable = false;
+
+		// 1. Si hay un ítem de aprobación formal activo en ProcessInstanceWorkitem
+		if (workitemsByTarget.containsKey(rla.Id)) {
+			ProcessInstanceWorkitem piw = workitemsByTarget.get(rla.Id);
+			turno = piw.Actor != null ? piw.Actor.Name : 'En aprobación';
+			esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId));
+		}
+		// 2. Jerarquía por Subestado operativo de la Solicitud
+		else if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito' || sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
+			if (rla.FSC_UsuarioAnalista__c != null && rla.FSC_UsuarioAnalista__r != null) {
+				turno = rla.FSC_UsuarioAnalista__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioAnalista__c));
+			} else {
+				turno = 'Cola Analistas de Crédito';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'ANALISTA');
+			}
+		}
+		else if (sub == 'Generación de pagarés y plantillas') {
+			if (rla.FSC_UsuarioPagaresYContratos__c != null && rla.FSC_UsuarioPagaresYContratos__r != null) {
+				turno = rla.FSC_UsuarioPagaresYContratos__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioPagaresYContratos__c));
+			} else {
+				turno = 'Mesa Pagarés y Contratos';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'FORMALIZACION');
+			}
+		}
+		else if (sub == 'Gestionar firmas') {
+			if (rla.FSC_UsuarioFormalizacion__c != null && rla.FSC_UsuarioFormalizacion__r != null) {
+				turno = rla.FSC_UsuarioFormalizacion__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioFormalizacion__c));
+			} else if (rla.Owner != null) {
+				// Oficial de Negocios gestiona la firma con su cliente
+				turno = rla.Owner.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId);
+			}
+		}
+		else if (sub == 'Recepción Docs Desembolso' || sub == 'Archivo y custodia') {
+			if (rla.FSC_UsuarioGestionPlanilla__c != null && rla.FSC_UsuarioGestionPlanilla__r != null) {
+				turno = rla.FSC_UsuarioGestionPlanilla__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioGestionPlanilla__c));
+			} else {
+				turno = 'Operaciones / Custodia';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || effectiveRole == 'FORMALIZACION');
+			}
+		}
+
+		// 3. Fallback a Supervisor / Comité si están marcados
+		if (turno == null) {
+			if (rla.FSC_DebeRevisarComite__c == true && rla.FSC_UsuarioComite__c != null && rla.FSC_UsuarioComite__r != null) {
+				turno = rla.FSC_UsuarioComite__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioComite__c));
+			} else if (rla.FSC_DebeRevisarSupervisor__c == true && rla.FSC_UsuarioSupervisor__c != null && rla.FSC_UsuarioSupervisor__r != null) {
+				turno = rla.FSC_UsuarioSupervisor__r.Name;
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(rla.FSC_UsuarioSupervisor__c));
+			} else {
+				turno = rla.Owner != null ? rla.Owner.Name : '-';
+				esAccionable = (effectiveRole == 'ADMIN_ALL' || rla.OwnerId == currentUserId);
+			}
+		}
+
+		row.turnoActual = turno;
+		row.esAccionablePorUsuario = esAccionable;
+	}
+
+	private static Id getAssignedUserForSubstatus(ResidentialLoanApplication rla) {
+		String sub = rla.FSC_Subestado__c;
+		if (sub == 'Recepción de documentos – Análisis' || sub == 'Análisis de crédito' || sub == 'En Motor Buró' || sub == 'En validación PEP/Listas') {
+			return rla.FSC_UsuarioAnalista__c;
+		} else if (sub == 'Generación de pagarés y plantillas') {
+			return rla.FSC_UsuarioPagaresYContratos__c;
+		} else if (sub == 'Gestionar firmas') {
+			return rla.FSC_UsuarioFormalizacion__c != null ? rla.FSC_UsuarioFormalizacion__c : rla.OwnerId;
+		} else if (sub == 'Recepción Docs Desembolso' || sub == 'Archivo y custodia') {
+			return rla.FSC_UsuarioGestionPlanilla__c;
+		}
+		if (rla.FSC_DebeRevisarComite__c == true) {
+			return rla.FSC_UsuarioComite__c;
+		}
+		if (rla.FSC_DebeRevisarSupervisor__c == true) {
+			return rla.FSC_UsuarioSupervisor__c;
+		}
+		return null;
 	}
 
 	private static Boolean checkIsAdminUser() {
@@ -328,7 +422,6 @@ public with sharing class FSC_CreditWorkspaceController {
 		} else if (effectiveRole == 'FORMALIZACION') {
 			queueDeveloperNames = QUEUES_FORMALIZACION;
 		} else if (effectiveRole == 'OFICIAL') {
-			// Solo el usuario como originador
 			return actorIds;
 		}
 
