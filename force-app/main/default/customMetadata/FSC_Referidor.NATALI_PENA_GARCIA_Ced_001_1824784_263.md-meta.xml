@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomMetadata xmlns="http://soap.sforce.com/2006/04/metadata" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" xmlns:xsd="http://www.w3.org/2001/XMLSchema">
+    <label>NATALI PENA GARCIA Ced. 001-1824784-0</label>
+    <protected>false</protected>
+    <values>
+        <field>FSC_CodigoReferidor__c</field>
+        <value xsi:type="xsd:string">263</value>
+    </values>
+    <values>
+        <field>FSC_NombreReferidor__c</field>
+        <value xsi:type="xsd:string">NATALI PENA GARCIA Ced. 001-1824784-0</value>
+    </values>
+</CustomMetadata>
