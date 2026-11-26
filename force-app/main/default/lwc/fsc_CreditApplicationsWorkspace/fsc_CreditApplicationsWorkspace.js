@@ -120,6 +120,8 @@ export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(Lig
         comiteSupervision: 0,
         formalizacionCustodia: 0,
         montoTotalCartera: 0,
+        montoGanado: 0,
+        montoPerdido: 0,
         isAdministrator: false
     };
 
@@ -165,11 +167,25 @@ export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(Lig
 
     get formattedTotalMonto() {
         const monto = this.metrics.montoTotalCartera || 0;
+        return this.formatCurrency(monto);
+    }
+
+    get formattedMontoGanado() {
+        const monto = this.metrics.montoGanado || 0;
+        return this.formatCurrency(monto);
+    }
+
+    get formattedMontoPerdido() {
+        const monto = this.metrics.montoPerdido || 0;
+        return this.formatCurrency(monto);
+    }
+
+    formatCurrency(val) {
         return new Intl.NumberFormat('es-DO', {
             style: 'currency',
             currency: 'DOP',
             maximumFractionDigits: 0
-        }).format(monto);
+        }).format(val);
     }
 
     handleRoleChange(event) {

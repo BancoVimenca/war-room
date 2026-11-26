@@ -39,11 +39,11 @@
                 </div>
             </template>
 
-            <!-- Métricas e Indicadores Superiores -->
-            <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_medium">
+            <!-- Métricas e Indicadores Superiores - Fila 1: Operativa por Etapas -->
+            <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_small">
                 
                 <!-- KPI 1: Mis Pendientes Directos -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Aprobaciones directas pendientes asignadas a ti o a las colas del rol">Mis Pendientes</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #c23934;">
@@ -54,7 +54,7 @@
                 </div>
 
                 <!-- KPI 2: Excepciones Activas -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Solicitudes con excepciones de Buró o de Negocios en trámite">Excepciones</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #ea8a00;">
@@ -65,7 +65,7 @@
                 </div>
 
                 <!-- KPI 3: En Recepción & Análisis -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Casos en validación PEP, Motor Buró o Análisis de Riesgo">En Análisis</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0176d3;">
@@ -76,7 +76,7 @@
                 </div>
 
                 <!-- KPI 4: Comité & Supervisión -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Casos escalados a comités de crédito o supervisores">Comité / Sup.</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #5b21b6;">
@@ -87,7 +87,7 @@
                 </div>
 
                 <!-- KPI 5: Formalización & Custodia -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+                <div class="slds-col slds-size_1-of-2 slds-medium-size_1-of-5 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
                         <div class="slds-text-title_caps slds-text-color_weak" title="Generación de pagarés, firmas y archivo de valores">Formalización</div>
                         <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0b827c;">
@@ -97,14 +97,41 @@
                     </div>
                 </div>
 
-                <!-- KPI 6: Cartera Activa Total -->
-                <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
+            </div>
+
+            <!-- Métricas Financieras - Fila 2: Indicadores de Monto de Cartera -->
+            <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_medium">
+                
+                <!-- Monto en Proceso -->
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total consolidado en proceso de crédito">Monto en Proceso</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #2e844a;">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total consolidado de solicitudes en estado 'En proceso'">Monto en Proceso</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #0176d3;">
                             <strong>{formattedTotalMonto}</strong>
                         </div>
-                        <div class="slds-text-body_small slds-text-color_weak">RD$ Total Trámite</div>
+                        <div class="slds-text-body_small slds-text-color_weak">RD$ Cartera en Trámite</div>
+                    </div>
+                </div>
+
+                <!-- Monto Ganado -->
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total de solicitudes aprobadas y cerradas ganadas">Monto Ganado</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #2e844a;">
+                            <strong>{formattedMontoGanado}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">RD$ Créditos Formalizados</div>
+                    </div>
+                </div>
+
+                <!-- Monto Perdido -->
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-m-bottom_x-small">
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total de solicitudes rechazadas o cerradas perdidas">Monto Perdido</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #c23934;">
+                            <strong>{formattedMontoPerdido}</strong>
+                        </div>
+                        <div class="slds-text-body_small slds-text-color_weak">RD$ Desestimado o Rechazado</div>
                     </div>
                 </div>
 
