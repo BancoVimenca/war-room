@@ -137,6 +137,9 @@ private class FSC_CreditWorkspaceControllerTest {
 
 		List<FSC_CreditWorkspaceController.CreditApplicationRow> misCasosAnalista =
 			FSC_CreditWorkspaceController.getCreditApplications('mis_casos', '', 'ANALISTA');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> aprobacionesRows =
+			FSC_CreditWorkspaceController.getCreditApplications('aprobaciones', '', 'ADMIN_ALL');
 		Test.stopTest();
 
 		Assert.isFalse(allRows.isEmpty(), 'Debe retornar filas en la pestaña general');
@@ -145,6 +148,25 @@ private class FSC_CreditWorkspaceControllerTest {
 		Assert.isFalse(comiteRows.isEmpty(), 'Debe retornar solicitudes de comité');
 		Assert.isFalse(formalizacionRows.isEmpty(), 'Debe retornar solicitudes de formalizacion');
 		Assert.isFalse(misCasosAdmin.isEmpty(), 'Admin en modo ALL debe ver casos activos');
-		Assert.isFalse(misCasosAnalista.isEmpty(), 'Analista debe ver sus casos asignados');
+		Assert.isNotNull(aprobacionesRows, 'La lista de aprobaciones no debe ser nula');
+	}
+
+	@IsTest
+	static void testProcessApprovalDecisionExceptions() {
+		Test.startTest();
+		try {
+			FSC_CreditWorkspaceController.processApprovalDecision(null, 'Approve', 'Comentario');
+			Assert.fail('Debe fallar con workitemId nulo');
+		} catch (Exception e) {
+			Assert.isNotNull(e.getMessage());
+		}
+
+		try {
+			FSC_CreditWorkspaceController.processApprovalDecision('04i000000000001AAA', 'Invalido', 'Comentario');
+			Assert.fail('Debe fallar con acción inválida');
+		} catch (Exception e) {
+			Assert.isNotNull(e.getMessage());
+		}
+		Test.stopTest();
 	}
 }

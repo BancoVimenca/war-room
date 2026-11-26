@@ -78,8 +78,8 @@
                 <!-- KPI 4: Análisis de Crédito -->
                 <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos en Análisis de Crédito formal por la mesa de riesgo">Análisis Crédito</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0284c7;">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos actualmente en evaluación de riesgo por analista de crédito">Análisis Crédito</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0070d2;">
                             <strong>{metrics.enAnalisis}</strong>
                         </div>
                         <div class="slds-text-body_small slds-text-color_weak">Evaluación Riesgo</div>
@@ -89,8 +89,8 @@
                 <!-- KPI 5: Comité & Supervisión -->
                 <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos escalados a comités de crédito o supervisores">Comité / Sup.</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #5b21b6;">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Casos en revisión por Supervisores o Comité">Comité / Sup.</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #706e6b;">
                             <strong>{metrics.comiteSupervision}</strong>
                         </div>
                         <div class="slds-text-body_small slds-text-color_weak">En Instancias</div>
@@ -100,8 +100,8 @@
                 <!-- KPI 6: Formalización & Custodia -->
                 <div class="slds-col slds-size_1-of-2 slds-medium-size_2-of-12 slds-m-bottom_x-small">
                     <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Generación de pagarés, firmas y archivo de valores">Formalización</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #0b827c;">
+                        <div class="slds-text-title_caps slds-text-color_weak" title="Pagarés, contratos, firmas, desembolso y custodia">Formalización</div>
+                        <div class="slds-text-heading_large slds-p-top_xx-small" style="color: #2e844a;">
                             <strong>{metrics.formalizacionCustodia}</strong>
                         </div>
                         <div class="slds-text-body_small slds-text-color_weak">Pagarés & Firmas</div>
@@ -110,37 +110,37 @@
 
             </div>
 
-            <!-- Métricas Financieras - Fila 2: Indicadores de Monto de Cartera -->
+            <!-- Métricas Financieras - Fila 2: Montos de Cartera -->
             <div class="slds-grid slds-wrap slds-gutters_small slds-m-bottom_medium">
                 
                 <!-- Monto en Proceso -->
                 <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-m-bottom_x-small">
-                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total consolidado de solicitudes en estado 'En proceso'">Monto en Proceso</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #0176d3;">
-                            <strong>{formattedTotalMonto}</strong>
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center financial-card">
+                        <div class="slds-text-title_caps slds-text-color_weak">Monto en Proceso</div>
+                        <div class="slds-text-heading_medium font-bold slds-p-top_xx-small" style="color: #0176d3;">
+                            {formattedTotalMonto}
                         </div>
                         <div class="slds-text-body_small slds-text-color_weak">RD$ Cartera en Trámite</div>
                     </div>
                 </div>
 
-                <!-- Monto Ganado -->
+                <!-- Monto Ganado / Formalizado -->
                 <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-m-bottom_x-small">
-                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total de solicitudes aprobadas y cerradas ganadas">Monto Ganado</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #2e844a;">
-                            <strong>{formattedMontoGanado}</strong>
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center financial-card">
+                        <div class="slds-text-title_caps slds-text-color_weak">Monto Ganado</div>
+                        <div class="slds-text-heading_medium font-bold slds-p-top_xx-small" style="color: #2e844a;">
+                            {formattedMontoGanado}
                         </div>
                         <div class="slds-text-body_small slds-text-color_weak">RD$ Créditos Formalizados</div>
                     </div>
                 </div>
 
-                <!-- Monto Perdido -->
+                <!-- Monto Perdido / Desestimado -->
                 <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12 slds-m-bottom_x-small">
-                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center kpi-card">
-                        <div class="slds-text-title_caps slds-text-color_weak" title="Monto total de solicitudes rechazadas o cerradas perdidas">Monto Perdido</div>
-                        <div class="slds-text-heading_large slds-p-top_xx-small slds-truncate" style="color: #c23934;">
-                            <strong>{formattedMontoPerdido}</strong>
+                    <div class="slds-box slds-box_x-small slds-theme_shade slds-text-align_center financial-card">
+                        <div class="slds-text-title_caps slds-text-color_weak">Monto Perdido</div>
+                        <div class="slds-text-heading_medium font-bold slds-p-top_xx-small" style="color: #c23934;">
+                            {formattedMontoPerdido}
                         </div>
                         <div class="slds-text-body_small slds-text-color_weak">RD$ Desestimado o Rechazado</div>
                     </div>
@@ -148,31 +148,49 @@
 
             </div>
 
-            <!-- Barra de Filtros y Búsqueda -->
-            <div class="slds-grid slds-wrap slds-grid_align-spread slds-grid_vertical-align-center slds-m-bottom_small">
-                <div class="slds-col slds-size_1-of-1 slds-medium-size_6-of-12">
+            <!-- Barra de Búsqueda y Filtros Rápidos -->
+            <div class="slds-grid slds-grid_vertical-align-center slds-m-bottom_small search-bar-container">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_8-of-12">
                     <p class="slds-text-body_small slds-text-color_weak">
                         Bandeja operativa multirrol para gestión de aprobaciones, excepciones y avance del ciclo de crédito.
                     </p>
                 </div>
-                <div class="slds-col slds-size_1-of-1 slds-medium-size_5-of-12">
+                <div class="slds-col slds-size_1-of-1 slds-medium-size_4-of-12">
                     <lightning-input
-                        name="searchKey"
-                        label="Buscar por solicitud o cliente"
                         type="search"
-                        variant="label-hidden"
                         placeholder="Buscar por código de solicitud o cliente..."
+                        variant="label-hidden"
                         value={searchKey}
                         onchange={handleSearchChange}>
                     </lightning-input>
                 </div>
             </div>
 
-            <!-- Pestañas Operativas por Etapa del Ciclo de Crédito -->
-            <lightning-tabset active-tab-value={activeTab}>
-                
-                <!-- Tab 1: Recepción & Buró -->
-                <lightning-tab label="📥 Recepción & Buró" value="recepcion" onactive={handleTabActive}>
+            <!-- Navegación por Etapas Operativas (Pestañas Especializadas) -->
+            <lightning-tabset active-tab-value={activeTab} class="stage-tabset">
+
+                <!-- Tab 1: Mis Aprobaciones Pendientes (Centro de Dictamen Directo) -->
+                <lightning-tab label="⚡ Mis Aprobaciones Pendientes" value="aprobaciones" onactive={handleTabActive}>
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando aprobaciones..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <!-- Tab 2: Recepción & Buró -->
+                <lightning-tab label="📩 Recepción & Buró" value="recepcion" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -191,7 +209,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 2: Análisis de Riesgo -->
+                <!-- Tab 3: Análisis de Riesgo -->
                 <lightning-tab label="🔍 Análisis de Riesgo" value="analisis" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -211,7 +229,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 3: Excepciones & Comités -->
+                <!-- Tab 4: Excepciones & Comités -->
                 <lightning-tab label="🏛️ Excepciones & Comités" value="comite" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -231,7 +249,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 4: Pagarés & Contratos -->
+                <!-- Tab 5: Pagarés & Contratos -->
                 <lightning-tab label="📑 Pagarés & Contratos" value="pagares" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -251,7 +269,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 5: Gestión de Firmas -->
+                <!-- Tab 6: Gestión de Firmas -->
                 <lightning-tab label="✍️ Gestión de Firmas" value="firmas" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -271,7 +289,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 6: Desembolso & Custodia -->
+                <!-- Tab 7: Desembolso & Custodia -->
                 <lightning-tab label="💰 Desembolso & Custodia" value="desembolso" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -291,7 +309,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 7: Mis Solicitudes / Turno -->
+                <!-- Tab 8: Mis Solicitudes / Turno -->
                 <lightning-tab label="📂 Mis Solicitudes / Turno" value="mis_casos" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -311,7 +329,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 8: Finalizadas / Histórico -->
+                <!-- Tab 9: Finalizadas / Histórico -->
                 <lightning-tab label="🏁 Finalizadas / Histórico" value="finalizadas" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -331,7 +349,7 @@
                     </template>
                 </lightning-tab>
 
-                <!-- Tab 9: Todas las Solicitudes -->
+                <!-- Tab 10: Todas las Solicitudes -->
                 <lightning-tab label="🌐 Todas las Solicitudes" value="todos" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -354,5 +372,67 @@
             </lightning-tabset>
 
         </div>
+
+        <!-- Modal de Dictamen Rápido de Aprobación -->
+        <template if:true={isModalOpen}>
+            <section role="dialog" tabindex="-1" class="slds-modal slds-fade-in-open slds-modal_small" aria-modal="true">
+                <div class="slds-modal__container">
+                    <header class="slds-modal__header">
+                        <button class="slds-button slds-button_icon slds-modal__close slds-button_icon-inverse" title="Cerrar" onclick={closeModal}>
+                            <lightning-icon icon-name="utility:close" alternative-text="cerrar" variant="inverse" size="small"></lightning-icon>
+                        </button>
+                        <h2 class="slds-modal__title slds-hyphenate">Dictamen de Aprobación</h2>
+                        <p class="slds-m-top_x-small slds-text-color_weak">
+                            Solicitud: <strong>{selectedRow.numeroSolicitud}</strong> - {selectedRow.name}
+                        </p>
+                    </header>
+                    <div class="slds-modal__content slds-p-around_medium">
+                        <div class="slds-box slds-box_xx-small slds-theme_shade slds-m-bottom_small">
+                            <div class="slds-grid slds-wrap">
+                                <div class="slds-col slds-size_1-of-2">
+                                    <p class="slds-text-body_small"><strong>Instancia:</strong> {selectedRow.processName}</p>
+                                    <p class="slds-text-body_small"><strong>Monto:</strong> DOP {selectedRow.monto}</p>
+                                </div>
+                                <div class="slds-col slds-size_1-of-2">
+                                    <p class="slds-text-body_small"><strong>Cliente:</strong> {selectedRow.accountName}</p>
+                                    <p class="slds-text-body_small"><strong>Excepción:</strong> {selectedRow.detalleExcepcion}</p>
+                                </div>
+                            </div>
+                        </div>
+
+                        <lightning-textarea
+                            name="approvalComments"
+                            label="Comentarios del Dictamen"
+                            placeholder="Ingrese las observaciones o justificación técnica de su decisión..."
+                            value={decisionComments}
+                            onchange={handleCommentsChange}
+                            required>
+                        </lightning-textarea>
+                    </div>
+                    <footer class="slds-modal__footer slds-grid slds-grid_align-spread">
+                        <lightning-button label="Cancelar" onclick={closeModal}></lightning-button>
+                        <div>
+                            <lightning-button
+                                label="Rechazar"
+                                variant="destructive"
+                                icon-name="utility:close"
+                                onclick={handleRejectDecision}
+                                disabled={isProcessingDecision}
+                                class="slds-m-right_x-small">
+                            </lightning-button>
+                            <lightning-button
+                                label="Aprobar"
+                                variant="brand"
+                                icon-name="utility:check"
+                                onclick={handleApproveDecision}
+                                disabled={isProcessingDecision}>
+                            </lightning-button>
+                        </div>
+                    </footer>
+                </div>
+            </section>
+            <div class="slds-backdrop slds-backdrop_open"></div>
+        </template>
+
     </lightning-card>
 </template>

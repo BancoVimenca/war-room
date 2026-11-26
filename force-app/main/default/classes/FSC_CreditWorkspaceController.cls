@@ -44,6 +44,9 @@ public with sharing class FSC_CreditWorkspaceController {
 		@AuraEnabled public String detalleExcepcion { get; set; }
 		@AuraEnabled public String turnoActual { get; set; }
 		@AuraEnabled public Boolean esAccionablePorUsuario { get; set; }
+		@AuraEnabled public Id workitemId { get; set; }
+		@AuraEnabled public String processName { get; set; }
+		@AuraEnabled public Boolean canApprove { get; set; }
 	}
 
 	private static final Set<String> QUEUES_ANALISIS = new Set<String>{
@@ -244,15 +247,17 @@ public with sharing class FSC_CreditWorkspaceController {
 		// Priorizar siempre el ítem donde el actor coincida con los grupos/usuario del usuario en sesión
 		Map<Id, ProcessInstanceWorkitem> workitemsByTarget = new Map<Id, ProcessInstanceWorkitem>();
 		Set<Id> userActionableRlaIds = new Set<Id>();
+		Set<Id> allApprovalRlaIds = new Set<Id>();
 
 		for (ProcessInstanceWorkitem item : [
-			SELECT Id, ProcessInstance.TargetObjectId, Actor.Name, OriginalActor.Name, ActorId
+			SELECT Id, ProcessInstance.TargetObjectId, ProcessInstance.ProcessDefinition.Name, Actor.Name, OriginalActor.Name, ActorId
 			FROM ProcessInstanceWorkitem
 			WITH SYSTEM_MODE
 			LIMIT 1000
 		]) {
 			Id targetId = item.ProcessInstance.TargetObjectId;
 			Id rlaId = solicitudIdByExcepcionId.containsKey(targetId) ? solicitudIdByExcepcionId.get(targetId) : targetId;
+			allApprovalRlaIds.add(rlaId);
 
 			if (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(item.ActorId)) {
 				userActionableRlaIds.add(rlaId);
@@ -281,7 +286,14 @@ public with sharing class FSC_CreditWorkspaceController {
 		Set<Id> targetExceptionRlaIds = excepcionesBySolicitud.keySet();
 
 		String filterCondition = '';
-		if (tabName == 'recepcion') {
+		if (tabName == 'aprobaciones') {
+			// Subsección dedicada a Aprobaciones Pendientes del Usuario o Globales
+			if (effectiveRole == 'ADMIN_ALL') {
+				filterCondition = 'AND Status = \'En proceso\' AND Id IN :allApprovalRlaIds ';
+			} else {
+				filterCondition = 'AND Status = \'En proceso\' AND Id IN :userActionableRlaIds ';
+			}
+		} else if (tabName == 'recepcion') {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Recepción de documentos – Análisis\', \'En validación PEP/Listas\', \'En Motor Buró\') ';
 		} else if (tabName == 'analisis') {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Análisis de crédito\', \'Banca Seguro\') ';
@@ -391,10 +403,52 @@ public with sharing class FSC_CreditWorkspaceController {
 			// Resolución Jerárquica de Turno / Responsable por Subestado
 			resolveTurnoResponsable(row, rla, workitemsByTarget, targetActorIds, effectiveRole, currentUserId);
 
+			// Mapear campos para dictamen directo
+			if (workitemsByTarget.containsKey(rla.Id)) {
+				ProcessInstanceWorkitem piw = workitemsByTarget.get(rla.Id);
+				row.workitemId = piw.Id;
+				row.processName = piw.ProcessInstance != null && piw.ProcessInstance.ProcessDefinition != null ? piw.ProcessInstance.ProcessDefinition.Name : 'Aprobación';
+				row.canApprove = (effectiveRole == 'ADMIN_ALL' || targetActorIds.contains(piw.ActorId));
+			} else {
+				row.canApprove = false;
+			}
+
 			rows.add(row);
 		}
 
 		return rows;
+	}
+
+	@AuraEnabled
+	public static String processApprovalDecision(Id workitemId, String action, String comments) {
+		try {
+			if (workitemId == null) {
+				throw new AuraHandledException('El identificador del ítem de aprobación no es válido.');
+			}
+			if (String.isBlank(action) || (action != 'Approve' && action != 'Reject')) {
+				throw new AuraHandledException('Acción no permitida. Debe ser Approve o Reject.');
+			}
+
+			Approval.ProcessWorkitemRequest req = new Approval.ProcessWorkitemRequest();
+			req.setWorkitemId(workitemId);
+			req.setAction(action);
+			if (String.isNotBlank(comments)) {
+				req.setComments(comments);
+			}
+
+			Approval.ProcessResult result = Approval.process(req);
+			if (!result.isSuccess()) {
+				String errMsg = 'Error al procesar la aprobación: ';
+				for (Database.Error err : result.getErrors()) {
+					errMsg += err.getMessage() + ' ';
+				}
+				throw new AuraHandledException(errMsg);
+			}
+
+			return action == 'Approve' ? 'Aprobado exitosamente' : 'Rechazado exitosamente';
+		} catch (Exception e) {
+			throw new AuraHandledException(e.getMessage());
+		}
 	}
 
 	private static void resolveTurnoResponsable(
