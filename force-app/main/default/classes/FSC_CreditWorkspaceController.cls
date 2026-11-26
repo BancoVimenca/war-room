@@ -254,16 +254,20 @@ public with sharing class FSC_CreditWorkspaceController {
 		               'FROM ResidentialLoanApplication WHERE Status != null ';
 
 		String filterCondition = '';
-		if (tabName == 'excepciones') {
-			filterCondition = 'AND (FSC_SolicitaExcepcionParaRechazoDeBuro__c = true OR Id IN :targetExceptionRlaIds) ';
-		} else if (tabName == 'recepcion') {
+		if (tabName == 'recepcion') {
 			filterCondition = 'AND FSC_Subestado__c IN (\'Recepción de documentos – Análisis\', \'En validación PEP/Listas\', \'En Motor Buró\') ';
 		} else if (tabName == 'analisis') {
-			filterCondition = 'AND FSC_Subestado__c = \'Análisis de crédito\' ';
+			filterCondition = 'AND FSC_Subestado__c IN (\'Análisis de crédito\', \'Banca Seguro\') ';
 		} else if (tabName == 'comite') {
-			filterCondition = 'AND (FSC_DebeRevisarComite__c = true OR FSC_DebeRevisarSupervisor__c = true) ';
-		} else if (tabName == 'formalizacion') {
-			filterCondition = 'AND FSC_Subestado__c IN (\'Generación de pagarés y plantillas\', \'Gestionar firmas\', \'Archivo y custodia\') ';
+			filterCondition = 'AND (FSC_DebeRevisarComite__c = true OR FSC_DebeRevisarSupervisor__c = true OR FSC_SolicitaExcepcionParaRechazoDeBuro__c = true OR Id IN :targetExceptionRlaIds) ';
+		} else if (tabName == 'pagares') {
+			filterCondition = 'AND FSC_Subestado__c IN (\'Generación de pagarés y plantillas\', \'Generación de contrato\', \'Documentación para contratos\') ';
+		} else if (tabName == 'firmas') {
+			filterCondition = 'AND FSC_Subestado__c IN (\'Gestionar firmas\', \'Formalización\') ';
+		} else if (tabName == 'desembolso') {
+			filterCondition = 'AND FSC_Subestado__c IN (\'Documentación para desembolso y firmas\', \'Pendiente planilla de desembolso\', \'Creación de crédito\', \'Desembolso\', \'Archivo y custodia\') ';
+		} else if (tabName == 'finalizadas') {
+			filterCondition = 'AND Status IN (\'Cerrada Ganada\', \'Cerrada Perdida\') ';
 		} else if (tabName == 'mis_casos') {
 			if (effectiveRole == 'ADMIN_ALL') {
 				filterCondition = 'AND Status = \'En proceso\' ';
