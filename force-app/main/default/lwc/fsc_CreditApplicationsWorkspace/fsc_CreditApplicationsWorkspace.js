@@ -26,40 +26,14 @@ const COLUMNS = [
         initialWidth: 160
     },
     {
-        label: 'Solicitud de Crédito',
-        fieldName: 'name',
+        label: 'Turno / Responsable Activo',
+        fieldName: 'turnoActual',
         type: 'text',
         sortable: true,
-        initialWidth: 260
-    },
-    {
-        label: 'Cliente',
-        fieldName: 'accountName',
-        type: 'text',
-        sortable: true,
-        initialWidth: 220
-    },
-    {
-        label: 'Producto / Tipo',
-        fieldName: 'productType',
-        type: 'text',
-        sortable: true,
-        initialWidth: 160
-    },
-    {
-        label: 'Monto Solicitado',
-        fieldName: 'monto',
-        type: 'currency',
-        typeAttributes: { currencyCode: 'DOP' },
-        sortable: true,
-        initialWidth: 150
-    },
-    {
-        label: 'Estado General',
-        fieldName: 'status',
-        type: 'text',
-        sortable: true,
-        initialWidth: 140
+        initialWidth: 200,
+        cellAttributes: {
+            class: 'font-bold slds-text-color_default'
+        }
     },
     {
         label: 'Subestado Actual',
@@ -69,21 +43,50 @@ const COLUMNS = [
         initialWidth: 220
     },
     {
+        label: 'Solicitud de Crédito',
+        fieldName: 'name',
+        type: 'text',
+        sortable: true,
+        initialWidth: 240
+    },
+    {
+        label: 'Cliente',
+        fieldName: 'accountName',
+        type: 'text',
+        sortable: true,
+        initialWidth: 200
+    },
+    {
+        label: 'Producto / Tipo',
+        fieldName: 'productType',
+        type: 'text',
+        sortable: true,
+        initialWidth: 150
+    },
+    {
+        label: 'Monto Solicitado',
+        fieldName: 'monto',
+        type: 'currency',
+        typeAttributes: { currencyCode: 'DOP' },
+        sortable: true,
+        initialWidth: 140
+    },
+    {
+        label: 'Estado General',
+        fieldName: 'status',
+        type: 'text',
+        sortable: true,
+        initialWidth: 130
+    },
+    {
         label: 'Excepción',
         fieldName: 'detalleExcepcion',
         type: 'text',
         sortable: true,
-        initialWidth: 180,
+        initialWidth: 170,
         cellAttributes: {
             class: { fieldName: 'excepcionCssClass' }
         }
-    },
-    {
-        label: 'Turno / Responsable',
-        fieldName: 'turnoActual',
-        type: 'text',
-        sortable: true,
-        initialWidth: 180
     },
     {
         label: 'Fecha Creación',
@@ -97,7 +100,7 @@ const COLUMNS = [
             minute: '2-digit'
         },
         sortable: true,
-        initialWidth: 160
+        initialWidth: 150
     },
     {
         type: 'action',
@@ -110,7 +113,7 @@ const COLUMNS = [
 ];
 
 export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(LightningElement) {
-    @track activeTab = 'excepciones';
+    @track activeTab = 'recepcion';
     @track searchKey = '';
     @track selectedRole = 'ADMIN_ALL';
     @track roleOptions = ROLE_OPTIONS;
@@ -201,16 +204,14 @@ export default class Fsc_CreditApplicationsWorkspace extends NavigationMixin(Lig
         this.isLoading = true;
 
         // Auto-seleccionar pestaña recomendada según el rol simulado
-        if (this.selectedRole === 'EXCEPCIONES') {
-            this.activeTab = 'excepciones';
+        if (this.selectedRole === 'EXCEPCIONES' || this.selectedRole === 'COMITE') {
+            this.activeTab = 'comite';
         } else if (this.selectedRole === 'ANALISTA') {
             this.activeTab = 'analisis';
-        } else if (this.selectedRole === 'COMITE') {
-            this.activeTab = 'comite';
         } else if (this.selectedRole === 'FORMALIZACION') {
-            this.activeTab = 'formalizacion';
+            this.activeTab = 'pagares';
         } else if (this.selectedRole === 'OFICIAL') {
-            this.activeTab = 'mis_casos';
+            this.activeTab = 'firmas';
         }
     }
 

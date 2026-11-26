@@ -168,28 +168,10 @@
                 </div>
             </div>
 
-            <!-- Pestañas Operativas por Etapa -->
+            <!-- Pestañas Operativas por Etapa del Ciclo de Crédito -->
             <lightning-tabset active-tab-value={activeTab}>
                 
-                <lightning-tab label="⚠️ Excepciones de Crédito & Buró" value="excepciones" onactive={handleTabActive}>
-                    <template if:true={isLoading}>
-                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
-                    </template>
-                    <template if:false={isLoading}>
-                        <lightning-datatable
-                            key-field="recordId"
-                            data={rows}
-                            columns={columns}
-                            hide-checkbox-column
-                            show-row-number-column
-                            sorted-by={sortedBy}
-                            sorted-direction={sortDirection}
-                            onsort={handleSort}
-                            onrowaction={handleRowAction}>
-                        </lightning-datatable>
-                    </template>
-                </lightning-tab>
-
+                <!-- Tab 1: Recepción & Buró -->
                 <lightning-tab label="📥 Recepción & Buró" value="recepcion" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -209,7 +191,8 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="🔍 Análisis de Crédito" value="analisis" onactive={handleTabActive}>
+                <!-- Tab 2: Análisis de Riesgo -->
+                <lightning-tab label="🔍 Análisis de Riesgo" value="analisis" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -228,7 +211,8 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="🏛️ Comité & Supervisión" value="comite" onactive={handleTabActive}>
+                <!-- Tab 3: Excepciones & Comités -->
+                <lightning-tab label="🏛️ Excepciones & Comités" value="comite" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -247,7 +231,8 @@
                     </template>
                 </lightning-tab>
 
-                <lightning-tab label="📑 Formalización & Pagarés" value="formalizacion" onactive={handleTabActive}>
+                <!-- Tab 4: Pagarés & Contratos -->
+                <lightning-tab label="📑 Pagarés & Contratos" value="pagares" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
                     </template>
@@ -266,6 +251,47 @@
                     </template>
                 </lightning-tab>
 
+                <!-- Tab 5: Gestión de Firmas -->
+                <lightning-tab label="✍️ Gestión de Firmas" value="firmas" onactive={handleTabActive}>
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <!-- Tab 6: Desembolso & Custodia -->
+                <lightning-tab label="💰 Desembolso & Custodia" value="desembolso" onactive={handleTabActive}>
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <!-- Tab 7: Mis Solicitudes / Turno -->
                 <lightning-tab label="📂 Mis Solicitudes / Turno" value="mis_casos" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
@@ -285,6 +311,27 @@
                     </template>
                 </lightning-tab>
 
+                <!-- Tab 8: Finalizadas / Histórico -->
+                <lightning-tab label="🏁 Finalizadas / Histórico" value="finalizadas" onactive={handleTabActive}>
+                    <template if:true={isLoading}>
+                        <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
+                    </template>
+                    <template if:false={isLoading}>
+                        <lightning-datatable
+                            key-field="recordId"
+                            data={rows}
+                            columns={columns}
+                            hide-checkbox-column
+                            show-row-number-column
+                            sorted-by={sortedBy}
+                            sorted-direction={sortDirection}
+                            onsort={handleSort}
+                            onrowaction={handleRowAction}>
+                        </lightning-datatable>
+                    </template>
+                </lightning-tab>
+
+                <!-- Tab 9: Todas las Solicitudes -->
                 <lightning-tab label="🌐 Todas las Solicitudes" value="todos" onactive={handleTabActive}>
                     <template if:true={isLoading}>
                         <lightning-spinner alternative-text="Cargando solicitudes..." size="medium"></lightning-spinner>
