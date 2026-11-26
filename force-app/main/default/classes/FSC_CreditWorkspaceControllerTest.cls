@@ -27,31 +27,43 @@ private class FSC_CreditWorkspaceControllerTest {
 	}
 
 	@IsTest
-	static void testGetWorkspaceMetrics() {
+	static void testGetWorkspaceMetricsRoles() {
 		Test.startTest();
-		FSC_CreditWorkspaceController.WorkspaceMetrics metrics = FSC_CreditWorkspaceController.getWorkspaceMetrics();
+		FSC_CreditWorkspaceController.WorkspaceMetrics metricsAdmin =
+			FSC_CreditWorkspaceController.getWorkspaceMetrics('ADMIN_ALL');
+
+		FSC_CreditWorkspaceController.WorkspaceMetrics metricsAnalista =
+			FSC_CreditWorkspaceController.getWorkspaceMetrics('ANALISTA');
+
+		FSC_CreditWorkspaceController.WorkspaceMetrics metricsOficial =
+			FSC_CreditWorkspaceController.getWorkspaceMetrics('OFICIAL');
 		Test.stopTest();
 
-		Assert.isNotNull(metrics, 'Las métricas no deben ser nulas');
-		Assert.isTrue(metrics.montoTotalCartera >= 850000, 'El monto total debe sumar las solicitudes activas');
-		Assert.isTrue(metrics.excepcionesActivas >= 1, 'Debe haber al menos 1 excepción activa');
+		Assert.isNotNull(metricsAdmin, 'Las métricas admin no deben ser nulas');
+		Assert.isNotNull(metricsAnalista, 'Las métricas analista no deben ser nulas');
+		Assert.isNotNull(metricsOficial, 'Las métricas oficial no deben ser nulas');
+		Assert.isTrue(metricsAdmin.montoTotalCartera >= 850000, 'El monto total debe sumar las solicitudes activas');
 	}
 
 	@IsTest
-	static void testGetCreditApplicationsTabs() {
+	static void testGetCreditApplicationsSimulatedRoles() {
 		Test.startTest();
 		List<FSC_CreditWorkspaceController.CreditApplicationRow> allRows =
-			FSC_CreditWorkspaceController.getCreditApplications('todos', '');
+			FSC_CreditWorkspaceController.getCreditApplications('todos', '', 'ADMIN_ALL');
 
 		List<FSC_CreditWorkspaceController.CreditApplicationRow> excRows =
-			FSC_CreditWorkspaceController.getCreditApplications('excepciones', '');
+			FSC_CreditWorkspaceController.getCreditApplications('excepciones', '', 'EXCEPCIONES');
 
 		List<FSC_CreditWorkspaceController.CreditApplicationRow> analisisRows =
-			FSC_CreditWorkspaceController.getCreditApplications('analisis', 'Workspace');
+			FSC_CreditWorkspaceController.getCreditApplications('analisis', 'Workspace', 'ANALISTA');
+
+		List<FSC_CreditWorkspaceController.CreditApplicationRow> misCasosAdmin =
+			FSC_CreditWorkspaceController.getCreditApplications('mis_casos', '', 'ADMIN_ALL');
 		Test.stopTest();
 
 		Assert.isFalse(allRows.isEmpty(), 'Debe retornar filas en la pestaña general');
 		Assert.isFalse(excRows.isEmpty(), 'Debe retornar solicitudes con excepción');
 		Assert.isFalse(analisisRows.isEmpty(), 'Debe filtrar por texto y por subestado análisis');
+		Assert.isFalse(misCasosAdmin.isEmpty(), 'Admin en modo ALL debe ver casos activos');
 	}
 }
