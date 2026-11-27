@@ -252,6 +252,7 @@ public with sharing class FSC_LoanDraftPersistenceService {
 			'rlaId' => rla.Id,
 			'accountId' => rla.AccountId,
 			'name' => rla.Name,
+			'nombreCliente' => rla.FSC_Nombre_Cliente__c,
 			'numeroSolicitud' => rla.FSC_NumeroSolicitud__c,
 			'status' => rla.Status,
 			'subestado' => rla.FSC_Subestado__c,
@@ -1026,7 +1027,7 @@ public with sharing class FSC_LoanDraftPersistenceService {
 
 	private static ResidentialLoanApplication findSnapshotApplication(Id rlaId, Id accountId, String loanType) {
 		String baseFields =
-			'Id, Name, FSC_NumeroSolicitud__c, AccountId, Status, FSC_Subestado__c, RecordTypeId, RecordType.DeveloperName, ' +
+			'Id, Name, FSC_Nombre_Cliente__c, FSC_NumeroSolicitud__c, AccountId, Status, FSC_Subestado__c, RecordTypeId, RecordType.DeveloperName, ' +
 			'FSC_TipoSolicitud__c, FSC_Facilidad__c, FSC_Moneda__c, FSC_PrestamoConvenio__c, FSC_Tipo_Modalidad__c, ' +
 			'FSC_lineaFinanciera__c, FSC_PrestamoGarantia__c, FSC_RequiereContratoPagareNotarial__c, ' +
 			'FSC_DescripcionPropositoFacilidad__c, FSC_Monto__c, FSC_Plazo_meses__c, FSC_Cuotas__c, ' +
