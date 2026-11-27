@@ -1899,52 +1899,147 @@ private class LeadTriggerHandlerTest {
         Id rtPF = getRecordTypePF();
         if (rtPF == null) return;
 
-        Lead l = new Lead(
-            FirstName = 'Juan',
-            LastName = 'Perez Test',
-            Company = 'Juan Perez Test',
-            Status = 'VALIDADO',
-            LEA_SubEstado__c = 'ACEPTADO',
-            RecordTypeId = rtPF,
-            LEA_TipoIdentificacion__c = 'Cédula',
-            LEA_NumIdentificacion__c = '40200000001',
-            LEA_Coincidencia_Listas_Internas__c = false,
-            LEA_Coincidencia_Listas_Externas__c = false
-        );
-        insert l;
+        LeadAutoQualificationQueue.bypassQueue = true;
+        try {
+            Lead l = new Lead(
+                FirstName = 'Juan',
+                LastName = 'Perez Test',
+                Company = 'Juan Perez Test',
+                Status = 'VALIDADO',
+                LEA_SubEstado__c = 'ACEPTADO',
+                RecordTypeId = rtPF,
+                LEA_TipoIdentificacion__c = 'Cédula',
+                LEA_NumIdentificacion__c = '40200000001',
+                LEA_Coincidencia_Listas_Internas__c = false,
+                LEA_Coincidencia_Listas_Externas__c = false
+            );
+            insert l;
+            LeadTriggerHandler.alreadyRan = false;
 
-        Test.startTest();
-        l.LEA_SubEstado__c = 'EN REVISIÓN';
-        update l;
-        Test.stopTest();
+            Test.startTest();
+            l.LEA_SubEstado__c = 'EN REVISIÓN';
+            update l;
+            Test.stopTest();
 
-        System.assertNotEquals(null, l.Id);
+            List<ProcessInstance> pis = [
+                SELECT Id
+                FROM ProcessInstance
+                WHERE TargetObjectId = :l.Id
+                AND Status = 'Pending'
+            ];
+            System.assertEquals(0, pis.size(), 'Un prospecto PF sin alertas en listas no debe generar proceso de aprobación PLA');
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+        }
     }
 
     @IsTest
-    static void testPersonaFisicaAlertaListasEnviaAPLA() {
+    static void testPersonaFisicaAlertaListasEnviaAPLAAombreDelOwner() {
         Id rtPF = getRecordTypePF();
         if (rtPF == null) return;
 
-        Lead l = new Lead(
-            FirstName = 'Alerta',
-            LastName = 'Listas Test',
-            Company = 'Alerta Listas Test',
-            Status = 'VALIDADO',
-            LEA_SubEstado__c = 'ACEPTADO',
-            RecordTypeId = rtPF,
-            LEA_TipoIdentificacion__c = 'Cédula',
-            LEA_NumIdentificacion__c = '40200000002',
-            LEA_Coincidencia_Listas_Internas__c = true
-        );
-        insert l;
+        LeadAutoQualificationQueue.bypassQueue = true;
+        try {
+            // Buscar otro usuario activo distinto al usuario actual para certificar que SubmitterId siempre es Lead.OwnerId
+            List<User> otherOwners = [
+                SELECT Id, Name
+                FROM User
+                WHERE IsActive = true
+                AND UserType = 'Standard'
+                AND Id != :UserInfo.getUserId()
+                LIMIT 1
+            ];
+            Id expectedOwnerId = otherOwners.isEmpty() ? UserInfo.getUserId() : otherOwners[0].Id;
 
-        Test.startTest();
-        l.LEA_SubEstado__c = 'EN REVISIÓN';
-        update l;
-        Test.stopTest();
+            Lead l = new Lead(
+                FirstName = 'Alerta',
+                LastName = 'Listas Owner Test',
+                Company = 'Alerta Listas Owner Test',
+                Status = 'VALIDADO',
+                LEA_SubEstado__c = 'ACEPTADO',
+                RecordTypeId = rtPF,
+                OwnerId = expectedOwnerId,
+                LEA_TipoIdentificacion__c = 'Cédula',
+                LEA_NumIdentificacion__c = '40200000002',
+                LEA_Coincidencia_Listas_Internas__c = true,
+                LEA_Listas__c = 'INTERNAL'
+            );
+            insert l;
+            LeadTriggerHandler.alreadyRan = false;
 
-        System.assertNotEquals(null, l.Id);
+            Test.startTest();
+            l.LEA_SubEstado__c = 'EN REVISIÓN';
+            update l;
+            Test.stopTest();
+
+            List<ProcessInstance> pis = [
+                SELECT Id, Status, SubmittedById, ProcessDefinition.DeveloperName
+                FROM ProcessInstance
+                WHERE TargetObjectId = :l.Id
+                AND Status = 'Pending'
+            ];
+            System.assertEquals(1, pis.size(), 'El prospecto PF con alerta en listas internas debe levantar exactamente 1 proceso pendiente en PLA');
+            System.assertEquals('PA_Flujo_Aprobacion_LEAD', pis[0].ProcessDefinition.DeveloperName, 'Debe iniciar el proceso de 1 paso PA_Flujo_Aprobacion_LEAD');
+            System.assertEquals(expectedOwnerId, pis[0].SubmittedById, 'La remisión a PLA debe quedar estrictamente a nombre del oficial propietario del prospecto');
+
+            List<Group> plaQueues = [SELECT Id FROM Group WHERE Type = 'Queue' AND DeveloperName = 'FSC_PLA' LIMIT 1];
+            if (!plaQueues.isEmpty()) {
+                List<ProcessInstanceWorkitem> wis = [
+                    SELECT Id, ActorId
+                    FROM ProcessInstanceWorkitem
+                    WHERE ProcessInstanceId = :pis[0].Id
+                ];
+                System.assertEquals(1, wis.size(), 'Debe existir 1 workitem activo para PLA');
+                System.assertEquals(plaQueues[0].Id, wis[0].ActorId, 'El workitem debe quedar asignado a la cola FSC_PLA');
+            }
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+        }
+    }
+
+    @IsTest
+    static void testPersonaFisicaAlertaListasExternasIdempotenteSinDuplicar() {
+        Id rtPF = getRecordTypePF();
+        if (rtPF == null) return;
+
+        LeadAutoQualificationQueue.bypassQueue = true;
+        try {
+            Lead l = new Lead(
+                FirstName = 'Juana',
+                LastName = 'Reyes Externa Test',
+                Company = 'Juana Reyes Externa Test',
+                Status = 'VALIDADO',
+                LEA_SubEstado__c = 'ACEPTADO',
+                RecordTypeId = rtPF,
+                LEA_TipoIdentificacion__c = 'Cédula',
+                LEA_NumIdentificacion__c = '40200000009',
+                LEA_Coincidencia_Listas_Internas__c = false,
+                LEA_Coincidencia_Listas_Externas__c = true,
+                LEA_Listas__c = 'PEPS'
+            );
+            insert l;
+            Lead insertedLead = [SELECT Id, OwnerId, IsConverted FROM Lead WHERE Id = :l.Id LIMIT 1];
+            LeadTriggerHandler.alreadyRan = false;
+
+            Test.startTest();
+            l.LEA_SubEstado__c = 'EN REVISIÓN';
+            update l;
+            // Re-invocar el handler simulando segunda actualización para validar guardia anti-duplicados
+            LeadTriggerHandler.alreadyRan = false;
+            LeadTriggerHandler.afterUpdate(new List<Lead>{ l }, new Map<Id, Lead>{ l.Id => l });
+            Test.stopTest();
+
+            List<ProcessInstance> pis = [
+                SELECT Id, Status, SubmittedById
+                FROM ProcessInstance
+                WHERE TargetObjectId = :l.Id
+                AND Status = 'Pending'
+            ];
+            System.assertEquals(1, pis.size(), 'No debe duplicar instancias de aprobación cuando ya existe una en curso');
+            System.assertEquals(insertedLead.OwnerId, pis[0].SubmittedById, 'Debe quedar remitido por el propietario del prospecto');
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+        }
     }
 
     @IsTest
@@ -1952,24 +2047,249 @@ private class LeadTriggerHandlerTest {
         Id rtPF = getRecordTypePF();
         if (rtPF == null) return;
 
-        Lead l = new Lead(
-            FirstName = 'Alerta',
-            LastName = 'Padron Test',
-            Company = 'Alerta Padron Test',
-            Status = 'VALIDADO',
-            LEA_SubEstado__c = 'ACEPTADO',
-            RecordTypeId = rtPF,
-            LEA_TipoIdentificacion__c = 'Cédula',
-            LEA_NumIdentificacion__c = '40200000003'
-        );
-        insert l;
+        LeadAutoQualificationQueue.bypassQueue = true;
+        LeadTriggerHandler.mockTechApprovalStatusForTests = 'Pendiente';
+        try {
+            Lead l = new Lead(
+                FirstName = 'Alerta',
+                LastName = 'Padron Test',
+                Company = 'Alerta Padron Test',
+                Status = 'INICIADO',
+                RecordTypeId = rtPF,
+                LEA_TipoIdentificacion__c = 'Cédula',
+                LEA_NumIdentificacion__c = '40200000003'
+            );
+            insert l;
+            Lead insertedLead = [SELECT Id, OwnerId, IsConverted FROM Lead WHERE Id = :l.Id LIMIT 1];
+            LeadTriggerHandler.alreadyRan = false;
 
-        Test.startTest();
-        l.LEA_SubEstado__c = 'EN REVISIÓN';
-        update l;
-        Test.stopTest();
+            Test.startTest();
+            LeadTriggerHandler.afterUpdate(
+                new List<Lead>{ insertedLead },
+                new Map<Id, Lead>{ insertedLead.Id => insertedLead }
+            );
+            // Segunda llamada para cubrir guardia alreadyPending en TechnologyApprovalQueueable
+            LeadTriggerHandler.alreadyRan = false;
+            LeadTriggerHandler.afterUpdate(
+                new List<Lead>{ insertedLead },
+                new Map<Id, Lead>{ insertedLead.Id => insertedLead }
+            );
+            Test.stopTest();
 
-        System.assertNotEquals(null, l.Id);
+            List<ProcessInstance> pis = [
+                SELECT Id, SubmittedById, ProcessDefinition.DeveloperName
+                FROM ProcessInstance
+                WHERE TargetObjectId = :l.Id
+                AND Status = 'Pending'
+            ];
+            System.assertEquals(1, pis.size(), 'Debe levantar proceso de aprobación de Tecnología ante estado Pendiente con Cédula');
+            System.assertEquals('PA_Aprobacion_Tecnologia_LEAD', pis[0].ProcessDefinition.DeveloperName);
+            System.assertEquals(insertedLead.OwnerId, pis[0].SubmittedById, 'Debe remitir a Tecnología a nombre del propietario del prospecto');
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+            LeadTriggerHandler.mockTechApprovalStatusForTests = null;
+        }
+    }
+
+    @IsTest
+    static void testPersonaJuridicaConDocumentoEnviaAprobacion() {
+        Id rtPJ = getRecordTypePJ();
+        if (rtPJ == null) return;
+
+        LeadAutoQualificationQueue.bypassQueue = true;
+        try {
+            String uniqueRnc = String.valueOf(Math.abs(Crypto.getRandomInteger())).leftPad(9, '1').substring(0, 9);
+            Lead pj = new Lead(
+                LastName = 'EMPRESA TEST PLA SOL0395',
+                Company = 'EMPRESA TEST PLA SOL0395 SRL',
+                LEA_Nombre_Corto_Comercial__c = 'EMPRESA TEST PLA SOL0395',
+                RecordTypeId = rtPJ,
+                Status = 'VALIDADO',
+                LEA_SubEstado__c = 'ACEPTADO',
+                LEA_RNC__c = uniqueRnc
+            );
+            insert pj;
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'Acta Constitutiva Test',
+                PathOnClient = 'ActaConstitutiva.pdf',
+                VersionData = Blob.valueOf('Documento de prueba SOL-0395'),
+                FirstPublishLocationId = pj.Id
+            );
+            insert cv;
+
+            Lead oldPj = pj.clone(true, true, false, false);
+            pj.LEA_SubEstado__c = 'EN REVISIÓN';
+            LeadTriggerHandler.alreadyRan = false;
+
+            Test.startTest();
+            LeadTriggerHandler.afterUpdate(
+                new List<Lead>{ pj },
+                new Map<Id, Lead>{ pj.Id => oldPj }
+            );
+            LeadTriggerHandler.alreadyRan = false;
+            LeadTriggerHandler.afterUpdate(
+                new List<Lead>{ pj },
+                new Map<Id, Lead>{ pj.Id => oldPj }
+            );
+            Test.stopTest();
+
+            Lead insertedPj = [SELECT Id, OwnerId FROM Lead WHERE Id = :pj.Id LIMIT 1];
+            List<ProcessInstance> pis = [
+                SELECT Id, SubmittedById, ProcessDefinition.DeveloperName
+                FROM ProcessInstance
+                WHERE TargetObjectId = :pj.Id
+                AND Status = 'Pending'
+            ];
+            System.assertEquals(1, pis.size(), 'Debe encolar y crear proceso de aprobación PLA/Legal para PJ con archivo adjunto');
+            System.assertEquals('Aprobacion_de_Candidatos_por_Legal', pis[0].ProcessDefinition.DeveloperName);
+            System.assertEquals(insertedPj.OwnerId, pis[0].SubmittedById);
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+        }
+    }
+
+    @IsTest
+    static void testPersonaJuridicaEnValidacionPorLegalDirectoConDocumento() {
+        Id rtPJ = getRecordTypePJ();
+        if (rtPJ == null) return;
+
+        LeadAutoQualificationQueue.bypassQueue = true;
+        try {
+            String uniqueRnc = String.valueOf(Math.abs(Crypto.getRandomInteger())).leftPad(9, '2').substring(0, 9);
+            Lead pj = new Lead(
+                LastName = 'EMPRESA DIRECTO LEGAL SOL0395',
+                Company = 'EMPRESA DIRECTO LEGAL SOL0395 SRL',
+                LEA_Nombre_Corto_Comercial__c = 'EMPRESA DIRECTO LEGAL SOL0395',
+                RecordTypeId = rtPJ,
+                Status = 'VALIDADO',
+                LEA_SubEstado__c = 'EN VALIDACION POR LEGAL',
+                LEA_RNC__c = uniqueRnc
+            );
+            insert pj;
+
+            ContentVersion cv = new ContentVersion(
+                Title = 'Estatutos Sociales Test',
+                PathOnClient = 'Estatutos.pdf',
+                VersionData = Blob.valueOf('Documento de prueba Legal SOL-0395'),
+                FirstPublishLocationId = pj.Id
+            );
+            insert cv;
+
+            LeadTriggerHandler.alreadyRan = false;
+
+            Test.startTest();
+            LeadTriggerHandler.afterUpdate(
+                new List<Lead>{ pj },
+                new Map<Id, Lead>{ pj.Id => pj }
+            );
+            Test.stopTest();
+
+            List<ProcessInstance> pis = [
+                SELECT Id, ProcessDefinition.DeveloperName
+                FROM ProcessInstance
+                WHERE TargetObjectId = :pj.Id
+                AND Status = 'Pending'
+            ];
+            System.assertEquals(1, pis.size(), 'Debe enviar directamente a PA_Flujo_Aprobacion_LEAD cuando ya está en validación por Legal');
+            System.assertEquals('PA_Flujo_Aprobacion_LEAD', pis[0].ProcessDefinition.DeveloperName);
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+        }
+    }
+
+    @IsTest
+    static void testValidacionesDuplicidadSinteticasCoberturaCompleta() {
+        LeadAutoQualificationQueue.bypassQueue = true;
+        try {
+            // 1. Validar duplicidad contra PersonAccount sintética y contra Empresa PJ sintética (RNC 9 dígitos)
+            List<RecordType> accRts = [
+                SELECT Id, DeveloperName
+                FROM RecordType
+                WHERE SObjectType = 'Account'
+                AND DeveloperName IN ('PersonAccount', 'Personas_Juridicas')
+            ];
+            Map<String, Id> rtByDev = new Map<String, Id>();
+            for (RecordType rt : accRts) {
+                rtByDev.put(rt.DeveloperName, rt.Id);
+            }
+
+            if (rtByDev.containsKey('Personas_Juridicas')) {
+                Account pjAcc = new Account(
+                    Name = 'EMPRESA SINTETICA RNC SOL0395 SRL',
+                    RecordTypeId = rtByDev.get('Personas_Juridicas'),
+                    ACC_RNC__c = '139988776',
+                    ACC_NumIdentificacion__c = '1-39-98877-6',
+                    ACC_CIF__c = '9988776'
+                );
+                Database.insert(pjAcc, false);
+
+                if (pjAcc.Id != null) {
+                    Lead dupRncEnterprise = new Lead(
+                        LastName = 'DUP EMPRESA RNC SOL0395',
+                        Company = 'DUP EMPRESA RNC SOL0395',
+                        LEA_RNC__c = '1-39-98877-6'
+                    );
+                    LeadTriggerHandler.beforeSave(new List<Lead>{ dupRncEnterprise }, null);
+                    System.assert(dupRncEnterprise.getErrors().size() > 0, 'Debe bloquear creación cuando existe empresa con ese RNC');
+                }
+            }
+
+            if (rtByDev.containsKey('PersonAccount')) {
+                Account pfAcc = new Account(
+                    FirstName = 'Cliente',
+                    LastName = 'Sintetico PF SOL0395',
+                    RecordTypeId = rtByDev.get('PersonAccount'),
+                    ACC_TipoIdentificacion__c = 'Cédula',
+                    ACC_NumIdentificacion__c = '40299887766',
+                    ACC_CIF__c = '8877665'
+                );
+                Database.insert(pfAcc, false);
+
+                if (pfAcc.Id != null) {
+                    Lead dupIdClient = new Lead(
+                        FirstName = 'Dup',
+                        LastName = 'Cliente PF SOL0395',
+                        Company = 'Dup Cliente PF SOL0395',
+                        LEA_TipoIdentificacion__c = 'Cédula',
+                        LEA_NumIdentificacion__c = '402-9988776-6'
+                    );
+                    LeadTriggerHandler.beforeSave(new List<Lead>{ dupIdClient }, null);
+                    System.assert(dupIdClient.getErrors().size() > 0, 'Debe bloquear creación cuando existe cliente PF con misma cédula');
+                }
+            }
+
+            // 2. Validar cambios de RNC e Identificación en beforeSave con oldMap (update path)
+            Lead basePj = new Lead(
+                LastName = 'BASE RNC EXISTENTE SOL0395',
+                Company = 'BASE RNC EXISTENTE SOL0395',
+                RecordTypeId = getRecordTypePJ(),
+                Status = 'INICIADO',
+                LEA_RNC__c = '139911223'
+            );
+            Database.insert(basePj, false);
+
+            Lead updPj = new Lead(
+                LastName = 'UPD RNC SOL0395',
+                Company = 'UPD RNC SOL0395',
+                RecordTypeId = getRecordTypePJ(),
+                Status = 'INICIADO',
+                LEA_RNC__c = '139944556'
+            );
+            Database.insert(updPj, false);
+
+            if (basePj.Id != null && updPj.Id != null) {
+                Lead oldUpd = updPj.clone(true, true, false, false);
+                updPj.LEA_RNC__c = '139911223';
+                LeadTriggerHandler.beforeSave(
+                    new List<Lead>{ updPj },
+                    new Map<Id, Lead>{ updPj.Id => oldUpd }
+                );
+                System.assert(updPj.getErrors().size() > 0, 'Debe detectar colisión de RNC al actualizar contra otro Lead');
+            }
+        } finally {
+            LeadAutoQualificationQueue.bypassQueue = false;
+        }
     }
 
     /*
