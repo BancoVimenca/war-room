@@ -315,14 +315,14 @@ public with sharing class FSC_ExcepcionesCreditoController {
 	}
 
 	@AuraEnabled
-	public static void subsanarYReenviarExcepcion(Id excepcionId, String nuevaDescripcion) {
+	public static void subsanarYReenviarExcepcion(Id excepcionId, String nuevoTipo, String nuevoDetalle, String nuevaDescripcion) {
 		validateOficialOAdministrador();
 		if (excepcionId == null || String.isBlank(nuevaDescripcion)) {
-			throw new AuraHandledException('La descripción subsanada de la excepción es obligatoria.');
+			throw new AuraHandledException('El motivo subsanado de la excepción es obligatorio.');
 		}
 		String descripcionNormalizada = nuevaDescripcion.trim();
 		if (descripcionNormalizada.length() > 32768) {
-			throw new AuraHandledException('La descripción excede el máximo permitido.');
+			throw new AuraHandledException('El motivo excede el máximo permitido.');
 		}
 
 		TargetSnapshot target = requireTarget(excepcionId);
@@ -338,9 +338,21 @@ public with sharing class FSC_ExcepcionesCreditoController {
 			throw new AuraHandledException('La solicitud debe estar En proceso y en uno de los subestados habilitados para reenviar la excepción.');
 		}
 
+		String tipoEfectivo = String.isNotBlank(nuevoTipo) ? nuevoTipo.trim() : target.tipo;
+		String detalleEfectivo = String.isNotBlank(nuevoDetalle) ? nuevoDetalle.trim() : target.detalle;
+		FSC_ExcepcionesDeCredito__mdt configuracion = findConfiguration(tipoEfectivo, detalleEfectivo);
+		if (configuracion == null) {
+			throw new AuraHandledException('El tipo y detalle seleccionados no corresponden a una excepción configurada.');
+		}
+		if (tipoEfectivo != TIPO_NEGOCIOS && (solicitud.FSC_Monto__c == null || solicitud.FSC_Monto__c <= 0)) {
+			throw new AuraHandledException('La solicitud debe tener un monto mayor que cero para determinar la ruta de aprobación.');
+		}
+
 		Database.update(
 			new FSC_Excepcion__c(
 				Id = excepcionId,
+				FSC_Tipo__c = configuracion.FSC_Tipo__c,
+				FSC_Detalle__c = configuracion.FSC_Detalle__c,
 				FSC_Motivo__c = descripcionNormalizada,
 				FSC_Estado__c = ESTADO_PENDIENTE
 			),

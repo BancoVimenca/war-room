@@ -1154,9 +1154,28 @@
 						<p class="slds-text-title_bold">Observaciones del aprobador:</p>
 						<p class="slds-m-top_xx-small">{excepcionContext.observaciones}</p>
 					</div>
+					<lightning-combobox
+						name="tipoSubsanarExcepcion"
+						label="Tipo de la Excepción"
+						value={tipoExcepcionSeleccionado}
+						options={tipoExcepcionOptions}
+						onchange={handleTipoExcepcionChange}
+						required>
+					</lightning-combobox>
+					<lightning-combobox
+						class="slds-m-top_small"
+						name="detalleSubsanarExcepcion"
+						label="Detalle de la Excepción"
+						value={detalleExcepcionSeleccionado}
+						options={detalleExcepcionOptions}
+						onchange={handleDetalleExcepcionChange}
+						disabled={isDetalleExcepcionDisabled}
+						required>
+					</lightning-combobox>
 					<lightning-textarea
+						class="slds-m-top_small"
 						name="subsanacionExcepcion"
-						label="Descripción / Justificación actualizada de la excepción"
+						label="Motivo de la Excepción"
 						value={subsanacionExcepcionInput}
 						onchange={handleSubsanacionExcepcionChange}
 						max-length="32768"
