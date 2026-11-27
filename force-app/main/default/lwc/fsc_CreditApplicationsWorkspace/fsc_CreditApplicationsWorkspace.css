@@ -20,3 +20,7 @@
     border-radius: 4px;
     font-size: 0.85rem;
 }
+
+.acta-flow-container {
+    min-height: 16rem;
+}
