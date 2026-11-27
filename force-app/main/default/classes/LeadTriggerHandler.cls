@@ -282,6 +282,9 @@ public with sharing class LeadTriggerHandler {
         }
     }
 
+    @TestVisible
+    private static String mockTechApprovalStatusForTests = null;
+
     private static void submitPLAApprovalIfNeeded(List<Lead> newList, Map<Id, Lead> oldMap) {
         System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() inicio');
         System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() newList size=' + (newList == null ? 0 : newList.size()));
@@ -304,7 +307,7 @@ public with sharing class LeadTriggerHandler {
             }
 
             Map<Id, Lead> freshLeads = new Map<Id, Lead>([
-                SELECT Id, RecordTypeId, RecordType.DeveloperName, LEA_TipoIdentificacion__c,
+                SELECT Id, Status, RecordTypeId, RecordType.DeveloperName, LEA_TipoIdentificacion__c,
                        LEA_Coincidencia_Listas_Internas__c, LEA_Coincidencia_Listas_Externas__c, LEA_Listas__c,
                        LEA_Estado_Aprobacion_Tecnologia__c, LEA_Doc_Legal_No_Aprobada__c,
                        LEA_SubEstado__c, LEA_Rechazo_Documentacion_PLA__c
@@ -327,10 +330,16 @@ public with sharing class LeadTriggerHandler {
                 Boolean isPersonaJuridica = (rtDevName == 'Candidato_Persona_Juridica');
 
                 if (isPersonaFisica) {
-                    // Regla BVWAR-264: Persona Física solo va a PLA si hay alerta por listas restrictivas
-                    Boolean tieneAlertaListas = (newLead.LEA_Coincidencia_Listas_Internas__c == true ||
+                    Boolean pfRechazado = (newLead.Status != null && newLead.Status.equalsIgnoreCase('RECHAZADO')) ||
+                                          (newLead.LEA_SubEstado__c != null && newLead.LEA_SubEstado__c.equalsIgnoreCase('RECHAZADO'));
+                    Boolean pfAprobado = (newLead.Status != null && newLead.Status.equalsIgnoreCase('APROBADO')) ||
+                                         (newLead.LEA_SubEstado__c != null && newLead.LEA_SubEstado__c.equalsIgnoreCase('ACEPTADO'));
+
+                    // Regla BVWAR-264 / SOL-0395: Persona Física solo va a PLA si hay alerta por listas restrictivas y no fue ya resuelta
+                    Boolean tieneAlertaListas = !pfRechazado && !pfAprobado && (
+                                                newLead.LEA_Coincidencia_Listas_Internas__c == true ||
                                                 newLead.LEA_Coincidencia_Listas_Externas__c == true ||
-                                                String.isNotBlank(newLead.LEA_Listas__c));
+                                                (String.isNotBlank(newLead.LEA_Listas__c) && !newLead.LEA_Listas__c.trim().equalsIgnoreCase('NINGUNA')));
                     if (tieneAlertaListas) {
                         leadIdsPFAlertPLA.add(newLead.Id);
                     }
@@ -338,21 +347,31 @@ public with sharing class LeadTriggerHandler {
                     // Regla BVWAR-264: Persona Física con Cédula solo va a Tecnología si hay alerta por Padrón Electoral
                     String tipoIdent = String.isNotBlank(newLead.LEA_TipoIdentificacion__c) ? newLead.LEA_TipoIdentificacion__c.trim() : '';
                     Boolean esCedula = (tipoIdent.equalsIgnoreCase('Cedula') || tipoIdent.equalsIgnoreCase('Cédula'));
-                    Boolean alertaPadronTec = (newLead.LEA_Estado_Aprobacion_Tecnologia__c == 'Pendiente');
+                    String estadoTec = mockTechApprovalStatusForTests != null
+                        ? mockTechApprovalStatusForTests
+                        : newLead.LEA_Estado_Aprobacion_Tecnologia__c;
+                    Boolean alertaPadronTec = (estadoTec == 'Pendiente');
                     if (esCedula && alertaPadronTec) {
                         leadIdsPFAlertTecnologia.add(newLead.Id);
                     }
                 } else if (isPersonaJuridica) {
-                    // [BVWAR-265 / BVWAR-266] Persona Jurídica:
-                    // 1) Si está en estado EN VALIDACION POR LEGAL y ya fue aprobada por PLA, NO debe regresar a PLA.
+                    // [BVWAR-265 / BVWAR-266 / SOL-0310] Persona Jurídica:
+                    // 1) Si está en estado RECHAZADO o Status Rechazado, NO auto-enviar a aprobación;
+                    // la responsabilidad queda en Negocios para subsanación y reenvío manual.
+                    String newSubEstado = null;
+                    String oldSubEstado = null;
                     Lead oldLeadRecord = (oldMap != null && oldMap.containsKey(newLead.Id)) ? oldMap.get(newLead.Id) : null;
-                    Boolean vieneDeLegal = (newLead.LEA_SubEstado__c == 'EN VALIDACION POR LEGAL' ||
-                                           (oldLeadRecord != null && oldLeadRecord.LEA_SubEstado__c == 'EN VALIDACION POR LEGAL'));
+                    try { newSubEstado = newLead.LEA_SubEstado__c; } catch (Exception e) {}
+                    try { if (oldLeadRecord != null) oldSubEstado = oldLeadRecord.LEA_SubEstado__c; } catch (Exception e) {}
 
-                    // 2) Si PLA rechazó (LEA_Rechazo_Documentacion_PLA__c == true), se detiene y NO continúa a Legal.
-                    Boolean rechazoPLA = (newLead.LEA_Rechazo_Documentacion_PLA__c == true);
+                    Boolean rechazoPLA = false;
+                    try { rechazoPLA = (newLead.LEA_Rechazo_Documentacion_PLA__c == true); } catch (Exception e) {}
 
-                    if (!rechazoPLA) {
+                    Boolean esRechazado = ((newSubEstado != null && newSubEstado.equalsIgnoreCase('RECHAZADO')) ||
+                                           (newLead.Status != null && newLead.Status.equalsIgnoreCase('RECHAZADO')) ||
+                                           rechazoPLA);
+
+                    if (!esRechazado) {
                         leadIdsToSubmit.add(newLead.Id);
                     }
                 } else {
@@ -393,56 +412,18 @@ public with sharing class LeadTriggerHandler {
             // para permitir que todas las automatizaciones terminen el guardado.
             System.enqueueJob(new LegalApprovalQueueable(leadIdsToSubmit));
 
-            Set<Id> leadIdsAlreadyPending = new Set<Id>();
-            ProcessDefinition legalProcess = [
-                SELECT Id
-                FROM ProcessDefinition
-                WHERE DeveloperName = 'Aprobacion_de_Candidatos_por_Legal'
-                AND State = 'Active'
-                LIMIT 1
-            ];
-
-            System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() query ProcessInstance Pending');
-
-            for (ProcessInstance pi : [
-                SELECT Id, TargetObjectId, Status
-                FROM ProcessInstance
-                WHERE TargetObjectId IN :leadIdsToSubmit
-                AND ProcessDefinitionId = :legalProcess.Id
-                AND Status IN ('Pending', 'Approved')
-            ]) {
-                leadIdsAlreadyPending.add(pi.TargetObjectId);
-            }
-
-            System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() leadIdsAlreadyPending=' + leadIdsAlreadyPending);
-
-            // La ejecucion sincrona se conserva vacia para evitar bloquear el Lead
-            // dentro de la transaccion que recalcula los documentos.
-            for (Id leadId : new Set<Id>()) {
-                if (leadIdsAlreadyPending.contains(leadId)) {
-                    System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() Lead ya está en aprobación. leadId=' + leadId);
-                    continue;
-                }
-
-                Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
-                req.setObjectId(leadId);
-                req.setSubmitterId(UserInfo.getUserId());
-                req.setComments('Enviado automáticamente a revisión PLA porque posee documentos legales no aprobados.');
-
-                System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() enviando Lead a aprobación PLA. leadId=' + leadId);
-
-                Approval.ProcessResult result = Approval.process(req);
-
-                System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() resultado leadId=' + leadId);
-                System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() result.isSuccess=' + result.isSuccess());
-                System.debug('LeadTriggerHandler.submitPLAApprovalIfNeeded() result.instanceId=' + result.getInstanceId());
-            }
-
         } catch (Exception e) {
             System.debug('ERROR LeadTriggerHandler.submitPLAApprovalIfNeeded: ' + e.getMessage());
             System.debug(e.getStackTraceString());
             throw e;
         }
+    }
+
+    private static Id resolveEffectiveSubmitterId(Id ownerId, Set<Id> activeOwnerIds) {
+        if (ownerId != null && String.valueOf(ownerId).startsWith('005') && activeOwnerIds != null && activeOwnerIds.contains(ownerId)) {
+            return ownerId;
+        }
+        return UserInfo.getUserId();
     }
 
     private class TechnologyApprovalQueueable implements Queueable {
@@ -452,12 +433,46 @@ public with sharing class LeadTriggerHandler {
         }
         public void execute(QueueableContext context) {
             if (leadIds.isEmpty()) return;
+
+            Set<Id> alreadyPending = new Set<Id>();
+            for (ProcessInstance pi : [
+                SELECT TargetObjectId
+                FROM ProcessInstance
+                WHERE TargetObjectId IN :leadIds
+                AND Status = 'Pending'
+            ]) {
+                alreadyPending.add(pi.TargetObjectId);
+            }
+
+            Map<Id, Lead> leadsMap = new Map<Id, Lead>([
+                SELECT Id, OwnerId, Owner.Name
+                FROM Lead
+                WHERE Id IN :leadIds
+            ]);
+            Set<Id> candidateOwnerIds = new Set<Id>();
+            for (Lead l : leadsMap.values()) {
+                if (l.OwnerId != null && String.valueOf(l.OwnerId).startsWith('005')) {
+                    candidateOwnerIds.add(l.OwnerId);
+                }
+            }
+            Set<Id> activeOwners = candidateOwnerIds.isEmpty()
+                ? new Set<Id>()
+                : new Map<Id, User>([SELECT Id FROM User WHERE Id IN :candidateOwnerIds AND IsActive = true]).keySet();
+
             for (Id leadId : leadIds) {
+                if (alreadyPending.contains(leadId)) {
+                    continue;
+                }
+                Lead l = leadsMap.get(leadId);
+                if (l == null) {
+                    continue;
+                }
                 try {
                     Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
                     req.setObjectId(leadId);
                     req.setProcessDefinitionNameOrId('PA_Aprobacion_Tecnologia_LEAD');
-                    req.setSubmitterId(UserInfo.getUserId());
+                    req.setSubmitterId(resolveEffectiveSubmitterId(l.OwnerId, activeOwners));
+                    req.setSkipEntryCriteria(true);
                     req.setComments('Enviado a revisión de Tecnología por alerta/rechazo de validación en Padrón Electoral.');
                     Approval.process(req);
                 } catch (Exception ex) {
@@ -474,16 +489,100 @@ public with sharing class LeadTriggerHandler {
         }
         public void execute(QueueableContext context) {
             if (leadIds.isEmpty()) return;
+
+            // [SOL-0395 / BVWAR-460] Guardia anti-duplicados: omitir prospectos que ya tienen instancia Pending o Approved
+            Set<Id> alreadyInProcess = new Set<Id>();
+            for (ProcessInstance pi : [
+                SELECT TargetObjectId
+                FROM ProcessInstance
+                WHERE TargetObjectId IN :leadIds
+                AND Status IN ('Pending', 'Approved')
+            ]) {
+                alreadyInProcess.add(pi.TargetObjectId);
+            }
+
+            Map<Id, Lead> leadsMap = new Map<Id, Lead>([
+                SELECT Id, OwnerId, Owner.Name, Status, LEA_SubEstado__c, LEA_Listas__c
+                FROM Lead
+                WHERE Id IN :leadIds
+            ]);
+
+            Set<Id> candidateOwnerIds = new Set<Id>();
+            for (Lead l : leadsMap.values()) {
+                if (l.OwnerId != null && String.valueOf(l.OwnerId).startsWith('005')) {
+                    candidateOwnerIds.add(l.OwnerId);
+                }
+            }
+            Set<Id> activeOwners = candidateOwnerIds.isEmpty()
+                ? new Set<Id>()
+                : new Map<Id, User>([SELECT Id FROM User WHERE Id IN :candidateOwnerIds AND IsActive = true]).keySet();
+
+            List<Group> plaQueues = [
+                SELECT Id
+                FROM Group
+                WHERE Type = 'Queue'
+                AND DeveloperName = 'FSC_PLA'
+                LIMIT 1
+            ];
+            Id plaQueueId = plaQueues.isEmpty() ? null : plaQueues[0].Id;
+
+            List<Id> newWorkitemIds = new List<Id>();
             for (Id leadId : leadIds) {
+                if (alreadyInProcess.contains(leadId)) {
+                    continue;
+                }
+                Lead candidate = leadsMap.get(leadId);
+                if (candidate == null) {
+                    continue;
+                }
+                if ((candidate.Status != null && (candidate.Status.equalsIgnoreCase('APROBADO') || candidate.Status.equalsIgnoreCase('RECHAZADO'))) ||
+                    (candidate.LEA_SubEstado__c != null && (candidate.LEA_SubEstado__c.equalsIgnoreCase('ACEPTADO') || candidate.LEA_SubEstado__c.equalsIgnoreCase('RECHAZADO')))) {
+                    continue;
+                }
+
                 try {
+                    // Remitir siempre a nombre del oficial propietario del prospecto (Lead.OwnerId) al flujo de 1 paso PA_Flujo_Aprobacion_LEAD
+                    Id effectiveSubmitterId = resolveEffectiveSubmitterId(candidate.OwnerId, activeOwners);
+                    String ownerLabel = (candidate.Owner != null && String.isNotBlank(candidate.Owner.Name))
+                        ? candidate.Owner.Name
+                        : String.valueOf(effectiveSubmitterId);
+                    String listDetail = String.isNotBlank(candidate.LEA_Listas__c)
+                        ? candidate.LEA_Listas__c
+                        : 'Listas de Control';
+
                     Approval.ProcessSubmitRequest req = new Approval.ProcessSubmitRequest();
                     req.setObjectId(leadId);
-                    req.setProcessDefinitionNameOrId('Aprobacion_de_Candidatos_por_Legal');
-                    req.setSubmitterId(UserInfo.getUserId());
-                    req.setComments('Enviado a revisión PLA por coincidencia de alerta en listas restrictivas.');
-                    Approval.process(req);
+                    req.setProcessDefinitionNameOrId('PA_Flujo_Aprobacion_LEAD');
+                    req.setSubmitterId(effectiveSubmitterId);
+                    req.setSkipEntryCriteria(true);
+                    req.setComments('Enviado a revisión PLA por coincidencia de alerta en listas restrictivas (' + listDetail + ') a nombre del propietario del prospecto (' + ownerLabel + ').');
+
+                    Approval.ProcessResult res = Approval.process(req);
+                    if (res.isSuccess() && res.getNewWorkitemIds() != null) {
+                        newWorkitemIds.addAll(res.getNewWorkitemIds());
+                    }
                 } catch (Exception ex) {
                     System.debug(LoggingLevel.WARN, 'Aprobación PLA ya pendiente o error: ' + ex.getMessage());
+                }
+            }
+
+            // Enrutar automáticamente los Workitems generados hacia la cola especializada FSC_PLA
+            if (plaQueueId != null && !newWorkitemIds.isEmpty()) {
+                try {
+                    List<ProcessInstanceWorkitem> workitemsToRoute = [
+                        SELECT Id, ActorId
+                        FROM ProcessInstanceWorkitem
+                        WHERE Id IN :newWorkitemIds
+                        AND ActorId != :plaQueueId
+                    ];
+                    if (!workitemsToRoute.isEmpty()) {
+                        for (ProcessInstanceWorkitem wi : workitemsToRoute) {
+                            wi.ActorId = plaQueueId;
+                        }
+                        update workitemsToRoute;
+                    }
+                } catch (Exception exRoute) {
+                    System.debug(LoggingLevel.WARN, 'Error al enrutar Workitem de Persona Física hacia FSC_PLA: ' + exRoute.getMessage());
                 }
             }
         }
@@ -501,30 +600,31 @@ public with sharing class LeadTriggerHandler {
                 return;
             }
 
-            ProcessDefinition legalProcess = [
-                SELECT Id
-                FROM ProcessDefinition
-                WHERE DeveloperName = 'Aprobacion_de_Candidatos_por_Legal'
-                AND State = 'Active'
-                LIMIT 1
-            ];
-
             Set<Id> pendingLeadIds = new Set<Id>();
             for (ProcessInstance instance : [
                 SELECT TargetObjectId
                 FROM ProcessInstance
                 WHERE TargetObjectId IN :leadIds
-                AND ProcessDefinitionId = :legalProcess.Id
                 AND Status IN ('Pending', 'Approved')
             ]) {
                 pendingLeadIds.add(instance.TargetObjectId);
             }
 
             Map<Id, Lead> targetLeads = new Map<Id, Lead>([
-                SELECT Id, RecordType.DeveloperName, LEA_SubEstado__c, LEA_Rechazo_Documentacion_PLA__c
+                SELECT Id, OwnerId, Status, RecordType.DeveloperName, LEA_SubEstado__c, LEA_Rechazo_Documentacion_PLA__c
                 FROM Lead
                 WHERE Id IN :leadIds
             ]);
+
+            Set<Id> candidateOwnerIds = new Set<Id>();
+            for (Lead l : targetLeads.values()) {
+                if (l.OwnerId != null && String.valueOf(l.OwnerId).startsWith('005')) {
+                    candidateOwnerIds.add(l.OwnerId);
+                }
+            }
+            Set<Id> activeOwners = candidateOwnerIds.isEmpty()
+                ? new Set<Id>()
+                : new Map<Id, User>([SELECT Id FROM User WHERE Id IN :candidateOwnerIds AND IsActive = true]).keySet();
 
             for (Id leadId : leadIds) {
                 if (pendingLeadIds.contains(leadId)) {
@@ -532,8 +632,12 @@ public with sharing class LeadTriggerHandler {
                 }
 
                 Lead l = targetLeads.get(leadId);
-                if (l != null && l.LEA_Rechazo_Documentacion_PLA__c == true) {
-                    // BVWAR-265: Si PLA rechazó, se detiene y no avanza a Legal
+                if (l != null && (
+                    l.LEA_Rechazo_Documentacion_PLA__c == true ||
+                    (l.LEA_SubEstado__c != null && l.LEA_SubEstado__c.equalsIgnoreCase('RECHAZADO')) ||
+                    (l.Status != null && l.Status.equalsIgnoreCase('RECHAZADO'))
+                )) {
+                    // [BVWAR-265 / SOL-0310] Si el prospecto fue rechazado/devuelto por PLA o Legal, se detiene y no avanza
                     continue;
                 }
 
@@ -547,15 +651,20 @@ public with sharing class LeadTriggerHandler {
                     request.setProcessDefinitionNameOrId('Aprobacion_de_Candidatos_por_Legal');
                     request.setComments('Orquestación Persona Jurídica: Enviado a revisión PLA (Paso Obligatorio 1).');
                 }
-                request.setSubmitterId(UserInfo.getUserId());
+                request.setSubmitterId(l != null ? resolveEffectiveSubmitterId(l.OwnerId, activeOwners) : UserInfo.getUserId());
+                request.setSkipEntryCriteria(true);
 
-                Approval.ProcessResult result = Approval.process(request);
-                if (!result.isSuccess()) {
-                    System.debug(
-                        LoggingLevel.ERROR,
-                        'No se pudo enviar el candidato a aprobacion. leadId=' + leadId +
-                        ', errors=' + result.getErrors()
-                    );
+                try {
+                    Approval.ProcessResult result = Approval.process(request);
+                    if (!result.isSuccess()) {
+                        System.debug(
+                            LoggingLevel.ERROR,
+                            'No se pudo enviar el candidato a aprobacion. leadId=' + leadId +
+                            ', errors=' + result.getErrors()
+                        );
+                    }
+                } catch (Exception exApproval) {
+                    System.debug(LoggingLevel.WARN, 'Aprobación automática omitida o no aplicable: ' + exApproval.getMessage());
                 }
             }
         }
