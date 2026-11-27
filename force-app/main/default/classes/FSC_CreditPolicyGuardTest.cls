@@ -397,8 +397,17 @@ private class FSC_CreditPolicyGuardTest {
 			),
 			false
 		);
+		Database.SaveResult discardResult = Database.update(
+			new ResidentialLoanApplication(
+				Id = draft.Id,
+				Status = 'Cerrada Perdida',
+				FSC_Subestado__c = 'Rechazada por cliente'
+			),
+			false
+		);
 		Test.stopTest();
 		Assert.isFalse(invalidPromotion.isSuccess(), 'Al promover a En proceso sin garantía válida, FSC_CreditPolicyGuard debe exigir el respaldo completo.');
+		Assert.isTrue(discardResult.isSuccess(), 'Al descartar un borrador a Cerrada Perdida no debe bloquearse por falta de garantía.');
 	}
 
 	private static ResidentialLoanApplication storedApplication(String product) {

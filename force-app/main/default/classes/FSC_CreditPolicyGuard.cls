@@ -15,6 +15,7 @@ public with sharing class FSC_CreditPolicyGuard {
 		'FSC_PlazoMesesAprobado__c'
 	};
 	private static final String STATUS_BORRADOR = 'Borrador';
+	private static final String STATUS_CERRADA_PERDIDA = 'Cerrada Perdida';
 	private static final String SUBESTADO_COMPLETANDO_INFORMACION = 'Completando información';
 	private static final Set<String> GUARANTEE_FIELDS = new Set<String>{
 		'FSC_Residential_Loan_Application__c',
@@ -203,7 +204,11 @@ public with sharing class FSC_CreditPolicyGuard {
 			return false;
 		}
 		Map<String, Object> populated = application.getPopulatedFieldsAsMap();
-		return populated.get('Status') == STATUS_BORRADOR &&
+		Object statusVal = populated.get('Status');
+		if (statusVal == STATUS_CERRADA_PERDIDA) {
+			return true;
+		}
+		return statusVal == STATUS_BORRADOR &&
 			populated.get('FSC_Subestado__c') == SUBESTADO_COMPLETANDO_INFORMACION;
 	}
 	private static Map<Id, List<FSC_CreditPolicyService.Guarantee>> groupedGuarantees(Set<Id> ids) {

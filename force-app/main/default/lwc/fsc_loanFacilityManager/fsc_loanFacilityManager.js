@@ -2138,10 +2138,51 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		this.scheduleServerFacilityDraftSync(immediateServerSync);
 	}
 
+	canonicalLoanTypeKey() {
+		const raw = String(this.loanRequestType || '')
+			.trim()
+			.toLowerCase();
+		if (raw.includes('hipotecario')) return 'hipotecario';
+		if (raw.includes('vehicul')) return 'vehiculo';
+		if (raw.includes('pyme') || raw.includes('comercial')) return 'pyme';
+		if (raw.includes('consumo')) return 'consumo';
+		return raw || 'credito';
+	}
+
 	buildSessionDraftKey() {
 		const accountId = this.getContextAccountId() || 'anon';
-		const loanType = this.loanRequestType || 'credito';
-		return `fsc_sol0390_draft_${accountId}_${loanType}`;
+		return `fsc_sol0390_draft_${accountId}_${this.canonicalLoanTypeKey()}`;
+	}
+
+	readSessionDraftState() {
+		try {
+			const raw = window.sessionStorage?.getItem(this.buildSessionDraftKey());
+			return raw ? JSON.parse(raw) : null;
+		} catch (e) {
+			return null;
+		}
+	}
+
+	resolveDraftApplicationId() {
+		const source = this.omniJsonData || {};
+		const directId = [this.persistedDraftRlaId, source.rlaId, source.c__rlaId, source.DatosSolicitante?.rlaId].find((value) =>
+			String(value || '').startsWith('0cd')
+		);
+		if (directId) {
+			if (this.persistedDraftRlaId !== directId) {
+				this.persistedDraftRlaId = directId;
+			}
+			return directId;
+		}
+		const sessionState = this.readSessionDraftState();
+		if (sessionState?.forceNewDraft === true && !sessionState?.rlaId) {
+			return '';
+		}
+		const cachedId = String(sessionState?.rlaId || '').startsWith('0cd') ? sessionState.rlaId : '';
+		if (cachedId) {
+			this.persistedDraftRlaId = cachedId;
+		}
+		return cachedId;
 	}
 
 	mirrorDraftToSessionStorage(facilityPayload) {
@@ -2149,11 +2190,14 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 			const key = this.buildSessionDraftKey();
 			const existingRaw = window.sessionStorage?.getItem(key);
 			const existing = existingRaw ? JSON.parse(existingRaw) : {};
+			const resolvedRlaId = this.resolveDraftApplicationId() || existing.rlaId || null;
 			window.sessionStorage?.setItem(
 				key,
 				JSON.stringify({
 					...existing,
-					rlaId: this.getContextApplicationId() || existing.rlaId || null,
+					rlaId: resolvedRlaId,
+					forceNewDraft: resolvedRlaId ? false : existing.forceNewDraft === true,
+					facility: facilityPayload,
 					datosGeneralesSolicitud: {
 						...(this.omniJsonData?.DatosGeneralesSolicitud || {}),
 						FSC_Facilidades_De_Credito__c: [facilityPayload],
@@ -2167,14 +2211,21 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	}
 
 	async ensureServerOrSessionDraftHydrated() {
-		if (this.hasFacilityDraftValue() || this.isHydratingServerDraft) {
+		if (this.hasUserEnteredFacilityDraftValue() || this.isHydratingServerDraft) {
 			return;
 		}
-		const rlaId = this.getContextApplicationId();
+		const sessionState = this.readSessionDraftState();
+		const rlaId = this.resolveDraftApplicationId();
 		const accountId = this.getContextAccountId();
 		const loanType = this.loanRequestType;
-		const forceNew = this.omniJsonData?.forceNewDraft === true && !rlaId;
-		if (forceNew || (!rlaId && !accountId)) {
+		const forceNew = (this.omniJsonData?.forceNewDraft === true || sessionState?.forceNewDraft === true) && !rlaId;
+		// Si el usuario eligió "Crear otra solicitud independiente" (forceNew), jamás consultamos borradores previos de la cuenta.
+		if (forceNew) {
+			return;
+		}
+		// Solo consultamos por accountId sin rlaId cuando se entró omitiendo Paso 1 (c__AvanzarPrimerStep).
+		const allowAccountLookupWithoutRlaId = !rlaId && !this.hasOmniApplicants && !!accountId;
+		if (!rlaId && !allowAccountLookupWithoutRlaId) {
 			return;
 		}
 
@@ -2198,7 +2249,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 				if (Array.isArray(snapshot.applicants) && snapshot.applicants.length > 0 && !this.hasOmniApplicants) {
 					this.applicationSnapshot = { applicants: snapshot.applicants };
 				}
-				if (snapshot.facility && !this.hasFacilityDraftValue()) {
+				if (snapshot.facility && !this.hasUserEnteredFacilityDraftValue()) {
 					const normalized = this.normalizeFacilities([snapshot.facility]);
 					this.facilities = normalized;
 					this.loadPrimaryFacility();
@@ -2213,7 +2264,19 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 							...(this.facilities.length ? { FSC_Facilidades_De_Credito__c: this.facilities } : {}),
 						};
 					}
+					if (!this.hasOmniApplicants && Array.isArray(snapshot.applicants) && snapshot.applicants.length > 0) {
+						rootUpdate.DatosSolicitante = {
+							...(this.omniJsonData?.DatosSolicitante || {}),
+							AccountId: snapshot.accountId || accountId,
+							FSC_Nombre_Cliente__c: snapshot.nombreCliente || snapshot.applicants[0]?.Name || '',
+							FormulaTitle: snapshot.name || '',
+							LoanApplicant: snapshot.applicants,
+						};
+					}
 					this.omniApplyCallResp(rootUpdate);
+				}
+				if (this.facilities.length > 0) {
+					this.mirrorDraftToSessionStorage(this.facilities[0]);
 				}
 				this.queueCreditPolicyValidation(true);
 				return;
@@ -2226,14 +2289,14 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 
 		// Respaldo secundario desde sessionStorage si la red o el contexto aún no tenían rlaId
 		try {
-			const cachedRaw = window.sessionStorage?.getItem(this.buildSessionDraftKey());
-			if (cachedRaw && !this.hasFacilityDraftValue()) {
-				const cached = JSON.parse(cachedRaw);
-				const cachedFacilities = this.normalizeFacilities(this.extractFacilities(cached?.datosGeneralesSolicitud));
+			const cached = this.readSessionDraftState();
+			if (cached && cached.forceNewDraft !== true && !this.hasUserEnteredFacilityDraftValue()) {
+				const rawFacs = cached.facility ? [cached.facility] : this.extractFacilities(cached?.datosGeneralesSolicitud);
+				const cachedFacilities = this.normalizeFacilities(rawFacs);
 				if (cachedFacilities.length > 0) {
 					if (cached.rlaId) {
 						this.persistedDraftRlaId = cached.rlaId;
-						this.omniApplyCallResp?.({ rlaId: cached.rlaId });
+						this.omniApplyCallResp?.({ rlaId: cached.rlaId, forceNewDraft: false });
 					}
 					this.facilities = cachedFacilities;
 					this.loadPrimaryFacility();
@@ -2247,7 +2310,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	}
 
 	scheduleServerFacilityDraftSync(immediate = false) {
-		if (this.creditPolicyDisconnected || this.isHydratingServerDraft || !this.hasFacilityDraftValue()) {
+		if (this.creditPolicyDisconnected || this.isHydratingServerDraft || !this.hasUserEnteredFacilityDraftValue()) {
 			return;
 		}
 		if (this.draftPersistTimer) {
@@ -2266,10 +2329,10 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	}
 
 	async syncFacilityDraftToServer() {
-		if (this.creditPolicyDisconnected || !this.hasFacilityDraftValue()) {
+		if (this.creditPolicyDisconnected || !this.hasUserEnteredFacilityDraftValue()) {
 			return;
 		}
-		const rlaId = this.getContextApplicationId();
+		const rlaId = this.resolveDraftApplicationId();
 		const accountId = this.getContextAccountId();
 		const loanType = this.loanRequestType;
 		if ((!rlaId && !accountId) || !loanType) {
@@ -2333,15 +2396,38 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 					return row;
 				});
 			}
+			const updatedPayload = this.buildFacilityPayload();
 			if (idsUpdated) {
-				const updatedPayload = this.buildFacilityPayload();
 				this.facilities = [updatedPayload];
 				this.notifyFacilitiesChange();
-				this.mirrorDraftToSessionStorage(updatedPayload);
 			}
+			this.mirrorDraftToSessionStorage(updatedPayload);
 		} catch (error) {
 			this.logPicklistError('guardado proactivo de facilidad en borrador', error);
 		}
+	}
+
+	hasUserEnteredFacilityDraftValue() {
+		const nonDefaultFacilidad = this.usesDefaultConsumoFacility && this.facilidad === DEFAULT_FACILITY_CONSUMO ? '' : this.facilidad;
+		const userValues = [
+			this.tipoFacilidad,
+			nonDefaultFacilidad,
+			this.estadoDelVehiculo,
+			this.prestamoConvenio,
+			this.tipoModalidad,
+			this.lineasFinancierasEmpresas,
+			this.descripcionPropositoFacilidad,
+			this.montoSolicitado,
+			this.plazoMeses,
+			this.tasaInteres,
+			this.tiempoTasaFija,
+			this.montoCuota,
+		];
+		return (
+			userValues.some((value) => this.hasValue(value)) ||
+			this.guaranteeRows.length > 0 ||
+			this.insuranceRows.length > 0
+		);
 	}
 
 	hasFacilityDraftValue() {
