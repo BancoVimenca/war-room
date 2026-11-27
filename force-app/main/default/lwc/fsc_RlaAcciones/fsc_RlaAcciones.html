@@ -165,6 +165,16 @@
 					</div>
 				</template>
 
+				<template if:true={showFirmaPlanillaPresencial}>
+					<div class="banner warning">
+						<span class="icon">&#9888;&#65039;</span>
+						<span class="text"
+							>Si el cliente firmó la Planilla de forma presencial, presione el botón "Planilla firmada presencialmente" y luego
+							continúe con el flujo normal.</span
+						>
+					</div>
+				</template>
+
 				<template if:true={showFormalizarGarantiasPendientes}>
 					<div class="banner warning">
 						<span class="icon">⚠️</span>
@@ -605,6 +615,26 @@
 									variant="brand"
 									label="Validar firmas"
 									onclick={handleConsultarEstadoFirma}>
+								</lightning-button>
+							</div>
+						</template>
+
+						<template if:true={showReenviarPlanillaAFirmar}>
+							<div class="btnRow center">
+								<lightning-button
+									variant="neutral"
+									label="Reenviar a firmar"
+									onclick={openModalReenvioFirma}>
+								</lightning-button>
+							</div>
+						</template>
+
+						<template if:true={showFirmaPlanillaPresencial}>
+							<div class="btnRow center">
+								<lightning-button
+									variant="neutral"
+									label="Planilla firmada presencialmente"
+									onclick={openModalFirmaPresencial}>
 								</lightning-button>
 							</div>
 						</template>
@@ -1660,6 +1690,101 @@
 						variant="brand"
 						label="Sí"
 						onclick={handleConfirmarFirmaFisica}>
+					</lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<!-- MODAL: Reenviar Planilla a firmar -->
+	<template if:true={showModalReenvioFirma}>
+		<section
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="reenvio-firma-title"
+			class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2
+						id="reenvio-firma-title"
+						class="slds-text-heading_medium">
+						Reenviar a firmar
+					</h2>
+				</header>
+
+				<div class="slds-modal__content slds-p-around_medium">
+					<p>Se cancelará el envío a firma actual y la Planilla se enviará nuevamente al correo actual del cliente.</p>
+				</div>
+
+				<footer class="slds-modal__footer">
+					<lightning-button
+						variant="neutral"
+						label="Cancelar"
+						onclick={closeModalReenvioFirma}
+						disabled={loading}>
+					</lightning-button>
+					<lightning-button
+						class="slds-m-left_small"
+						variant="brand"
+						label="Reenviar a firmar"
+						onclick={handleConfirmarReenvioFirma}
+						disabled={loading}>
+					</lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<!-- MODAL: Planilla firmada presencialmente -->
+	<template if:true={showModalFirmaPresencial}>
+		<section
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="firma-presencial-title"
+			class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2
+						id="firma-presencial-title"
+						class="slds-text-heading_medium">
+						Planilla firmada presencialmente
+					</h2>
+				</header>
+
+				<div class="slds-modal__content slds-p-around_medium">
+					<p>
+						Adjunte la Planilla firmada de forma presencial. Al confirmar se cancelará el envío a firma digital pendiente y la firma de la
+						Planilla se registrará como completa.
+					</p>
+					<lightning-file-upload
+						class="slds-m-top_medium"
+						label="Planilla firmada"
+						record-id={recordId}
+						accept={formatosFirmaPresencial}
+						onuploadfinished={handleArchivoFirmaPresencial}
+						disabled={loading}></lightning-file-upload>
+					<template if:true={archivoFirmaPresencial}>
+						<p class="slds-m-top_x-small">{archivoFirmaPresencial.nombre}</p>
+					</template>
+				</div>
+
+				<footer class="slds-modal__footer">
+					<lightning-button
+						variant="neutral"
+						label="Cancelar"
+						onclick={closeModalFirmaPresencial}
+						disabled={loading}>
+					</lightning-button>
+					<lightning-button
+						class="slds-m-left_small"
+						variant="brand"
+						label="Confirmar Planilla firmada"
+						onclick={handleConfirmarFirmaPresencial}
+						disabled={disableConfirmarFirmaPresencial}>
 					</lightning-button>
 				</footer>
 			</div>

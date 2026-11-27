@@ -370,6 +370,37 @@ private class FSC_CreditPolicyGuardTest {
 		Assert.isFalse(result.isSuccess(), 'Una excepción ajena a monto no debe liberar el tope del 80%.');
 	}
 
+	@IsTest
+	static void incompleteDraftBypassesStrictGuardUntilPromotedToEnProceso() {
+		Account borrower = [SELECT Id FROM Account LIMIT 1];
+		ResidentialLoanApplication draft = new ResidentialLoanApplication(
+			Name = 'Borrador Parcial SOL-0390',
+			AccountId = borrower.Id,
+			RecordTypeId = Schema.SObjectType.ResidentialLoanApplication.getRecordTypeInfosByDeveloperName()
+				.get('FSC_Solicitud_Credito_Hipotecario')
+				.getRecordTypeId(),
+			Status = 'Borrador',
+			FSC_Subestado__c = 'Completando información',
+			FSC_Moneda__c = '1',
+			FSC_Monto__c = 700000
+		);
+		Test.startTest();
+		insert draft;
+		Assert.isNotNull(draft.Id, 'Mientras esté en Borrador / Completando información debe permitir guardado parcial sin garantía.');
+
+		Database.SaveResult invalidPromotion = Database.update(
+			new ResidentialLoanApplication(
+				Id = draft.Id,
+				Status = 'En proceso',
+				FSC_Subestado__c = 'En Motor Buró',
+				FSC_Plazo_meses__c = '240'
+			),
+			false
+		);
+		Test.stopTest();
+		Assert.isFalse(invalidPromotion.isSuccess(), 'Al promover a En proceso sin garantía válida, FSC_CreditPolicyGuard debe exigir el respaldo completo.');
+	}
+
 	private static ResidentialLoanApplication storedApplication(String product) {
 		String recordTypeName = 'FSC_Solicitud_Credito_' + product;
 		return [
@@ -377,6 +408,8 @@ private class FSC_CreditPolicyGuardTest {
 				Id,
 				AccountId,
 				RecordTypeId,
+				Status,
+				FSC_Subestado__c,
 				FSC_Monto__c,
 				FSC_Plazo_meses__c,
 				FSC_Moneda__c,

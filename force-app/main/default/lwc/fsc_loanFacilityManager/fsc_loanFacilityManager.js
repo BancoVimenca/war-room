@@ -3,6 +3,7 @@ import getCreditPolicyRules from '@salesforce/apex/FSC_CreditPolicyController.ge
 import evaluateCreditPolicy from '@salesforce/apex/FSC_CreditPolicyController.evaluate';
 import getLoanTermConfiguration from '@salesforce/apex/FSC_LoanFacilityController.getLoanTermConfiguration';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import LightningConfirm from 'lightning/confirm';
 import { getObjectInfo, getPicklistValues } from 'lightning/uiObjectInfoApi';
 import { OmniscriptBaseMixin } from 'omnistudio/omniscriptBaseMixin';
 import getInsuranceRate from '@salesforce/apex/FSC_LoanFacilityController.getInsuranceRate';
@@ -12,6 +13,8 @@ import getInsuranceTypeOptions from '@salesforce/apex/FSC_LoanFacilityController
 import getAccountLoanApplicant from '@salesforce/apex/FSC_LoanApplicantController.getAccountLoanApplicant';
 import getUsdToDopRate from '@salesforce/apex/FSC_LoanApplicantController.getUsdToDopRate';
 import getApplicationSnapshot from '@salesforce/apex/FSC_LoanApplicantController.getApplicationSnapshot';
+import saveFacilityDraft from '@salesforce/apex/FSC_LoanDraftPersistenceService.saveFacilityDraft';
+import getDraftSnapshot from '@salesforce/apex/FSC_LoanDraftPersistenceService.getDraftSnapshot';
 import FACILITY_OBJECT from '@salesforce/schema/FSC_Facilidades_De_Credito__c';
 import GUARANTEE_OBJECT from '@salesforce/schema/FSC_Garantia__c';
 import INSURANCE_OBJECT from '@salesforce/schema/FSC_Seguro__c';
@@ -151,6 +154,11 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	lastNotifiedFacilitiesJson = '';
 	attemptedInsuranceValidation = false;
 	attemptedGuaranteeValidation = false;
+	persistedDraftRlaId = '';
+	draftPersistTimer = null;
+	isHydratingServerDraft = false;
+	serverDraftHydratedKey = '';
+	boundBeforeUnloadHandler = null;
 
 	editRowKey = null;
 
@@ -203,6 +211,12 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	@api
 	set value(value) {
 		const facilities = this.normalizeFacilities(this.extractFacilities(value));
+		// Blindaje ante cambio de subpestañas en Lightning Console: si OmniStudio envía un valor vacío
+		// mientras el usuario ya tiene datos capturados localmente, conservar el borrador local y re-sincronizar.
+		if (facilities.length === 0 && this.hasFacilityDraftValue()) {
+			this.notifyFacilitiesChange();
+			return;
+		}
 		this.facilities = facilities;
 
 		if (this.stringifyFacilities(facilities) !== this.lastNotifiedFacilitiesJson) {
@@ -449,8 +463,16 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 
 	connectedCallback() {
 		this.creditPolicyDisconnected = false;
+		this.boundBeforeUnloadHandler = (event) => {
+			if (this.showGuaranteeEditor || this.showInsuranceEditor) {
+				event.preventDefault();
+				event.returnValue = '';
+			}
+		};
+		window.addEventListener('beforeunload', this.boundBeforeUnloadHandler);
 		this.hydrateFacilitiesFromOmni();
 		this.applyFacilityRules();
+		this.ensureServerOrSessionDraftHydrated();
 		if (!this.hasOmniApplicants) {
 			// Sin paso Datos del Solicitante se cargan de una vez los datos de la solicitud para que las validaciones sean sincronas.
 			this.ensureFallbackDebtor();
@@ -495,7 +517,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		}
 
 		if (reportErrors) {
-			this.persistFacilityDraft();
+			this.persistFacilityDraft(true);
 			return this.facilities.length > 0;
 		}
 
@@ -1700,7 +1722,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		this.closeInsuranceEditor();
 	}
 
-	handleValueChange(event) {
+	async handleValueChange(event) {
 		const fieldName = event.target.name;
 		if (fieldName === 'formaPago' && this.isTipoCreditoHipotecario) {
 			this.formaPago = this.getDefaultFormaPagoValue();
@@ -1710,6 +1732,21 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 
 		const previousValue = this[fieldName];
 		const value = event.detail?.value ?? event.target.value;
+
+		if (fieldName === 'tipoFacilidad' && previousValue !== value && (this.guaranteeRows.length > 0 || this.insuranceRows.length > 0)) {
+			const confirmed = await LightningConfirm.open({
+				label: 'Cambiar Tipo de Facilidad',
+				message:
+					'Al cambiar el Tipo de Facilidad se limpiarán las garantías y seguros agregados en esta pantalla. ¿Desea continuar?',
+				variant: 'header',
+				theme: 'warning',
+			});
+			if (!confirmed) {
+				event.target.value = previousValue;
+				return;
+			}
+		}
+
 		this[fieldName] = value;
 
 		if (fieldName === 'tipoFacilidad' && previousValue !== value) {
@@ -1756,7 +1793,11 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		}
 
 		this.queueCreditPolicyValidation();
-		this.persistFacilityDraft();
+		this.persistFacilityDraft(fieldName === 'tipoFacilidad');
+	}
+
+	handlePolicyFieldBlur() {
+		this.queueCreditPolicyValidation(true);
 	}
 
 	handleNumericKeyDown(event) {
@@ -2081,7 +2122,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		}
 	}
 
-	persistFacilityDraft() {
+	persistFacilityDraft(immediateServerSync = false) {
 		if (!this.hasFacilityDraftValue()) {
 			this.facilities = [];
 			this.editRowKey = null;
@@ -2093,6 +2134,214 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		this.editRowKey = payload.__key;
 		this.facilities = [payload];
 		this.notifyFacilitiesChange();
+		this.mirrorDraftToSessionStorage(payload);
+		this.scheduleServerFacilityDraftSync(immediateServerSync);
+	}
+
+	buildSessionDraftKey() {
+		const accountId = this.getContextAccountId() || 'anon';
+		const loanType = this.loanRequestType || 'credito';
+		return `fsc_sol0390_draft_${accountId}_${loanType}`;
+	}
+
+	mirrorDraftToSessionStorage(facilityPayload) {
+		try {
+			const key = this.buildSessionDraftKey();
+			const existingRaw = window.sessionStorage?.getItem(key);
+			const existing = existingRaw ? JSON.parse(existingRaw) : {};
+			window.sessionStorage?.setItem(
+				key,
+				JSON.stringify({
+					...existing,
+					rlaId: this.getContextApplicationId() || existing.rlaId || null,
+					datosGeneralesSolicitud: {
+						...(this.omniJsonData?.DatosGeneralesSolicitud || {}),
+						FSC_Facilidades_De_Credito__c: [facilityPayload],
+					},
+					updatedAt: Date.now(),
+				})
+			);
+		} catch (e) {
+			// sessionStorage opcional
+		}
+	}
+
+	async ensureServerOrSessionDraftHydrated() {
+		if (this.hasFacilityDraftValue() || this.isHydratingServerDraft) {
+			return;
+		}
+		const rlaId = this.getContextApplicationId();
+		const accountId = this.getContextAccountId();
+		const loanType = this.loanRequestType;
+		const forceNew = this.omniJsonData?.forceNewDraft === true && !rlaId;
+		if (forceNew || (!rlaId && !accountId)) {
+			return;
+		}
+
+		const hydrateKey = `${rlaId || 'no-rla'}:${accountId || 'no-acc'}:${loanType || 'no-type'}`;
+		if (this.serverDraftHydratedKey === hydrateKey) {
+			return;
+		}
+		this.serverDraftHydratedKey = hydrateKey;
+		this.isHydratingServerDraft = true;
+
+		try {
+			const snapshot = await getDraftSnapshot({
+				rlaId: rlaId || null,
+				accountId: accountId || null,
+				loanType: loanType || '',
+			});
+			if (snapshot?.found) {
+				if (snapshot.rlaId) {
+					this.persistedDraftRlaId = snapshot.rlaId;
+				}
+				if (Array.isArray(snapshot.applicants) && snapshot.applicants.length > 0 && !this.hasOmniApplicants) {
+					this.applicationSnapshot = { applicants: snapshot.applicants };
+				}
+				if (snapshot.facility && !this.hasFacilityDraftValue()) {
+					const normalized = this.normalizeFacilities([snapshot.facility]);
+					this.facilities = normalized;
+					this.loadPrimaryFacility();
+					this.notifyFacilitiesChange();
+				}
+				if (typeof this.omniApplyCallResp === 'function') {
+					const rootUpdate = { rlaId: snapshot.rlaId, forceNewDraft: false };
+					if (snapshot.datosGeneralesSolicitud && Object.keys(snapshot.datosGeneralesSolicitud).length > 0) {
+						rootUpdate.DatosGeneralesSolicitud = {
+							...(this.omniJsonData?.DatosGeneralesSolicitud || {}),
+							...snapshot.datosGeneralesSolicitud,
+							...(this.facilities.length ? { FSC_Facilidades_De_Credito__c: this.facilities } : {}),
+						};
+					}
+					this.omniApplyCallResp(rootUpdate);
+				}
+				this.queueCreditPolicyValidation(true);
+				return;
+			}
+		} catch (error) {
+			this.logPicklistError('rehidratacion de borrador de solicitud', error);
+		} finally {
+			this.isHydratingServerDraft = false;
+		}
+
+		// Respaldo secundario desde sessionStorage si la red o el contexto aún no tenían rlaId
+		try {
+			const cachedRaw = window.sessionStorage?.getItem(this.buildSessionDraftKey());
+			if (cachedRaw && !this.hasFacilityDraftValue()) {
+				const cached = JSON.parse(cachedRaw);
+				const cachedFacilities = this.normalizeFacilities(this.extractFacilities(cached?.datosGeneralesSolicitud));
+				if (cachedFacilities.length > 0) {
+					if (cached.rlaId) {
+						this.persistedDraftRlaId = cached.rlaId;
+						this.omniApplyCallResp?.({ rlaId: cached.rlaId });
+					}
+					this.facilities = cachedFacilities;
+					this.loadPrimaryFacility();
+					this.notifyFacilitiesChange();
+					this.queueCreditPolicyValidation(true);
+				}
+			}
+		} catch (e) {
+			// sessionStorage opcional
+		}
+	}
+
+	scheduleServerFacilityDraftSync(immediate = false) {
+		if (this.creditPolicyDisconnected || this.isHydratingServerDraft || !this.hasFacilityDraftValue()) {
+			return;
+		}
+		if (this.draftPersistTimer) {
+			clearTimeout(this.draftPersistTimer);
+			this.draftPersistTimer = null;
+		}
+		const runSync = () => {
+			this.draftPersistTimer = null;
+			this.syncFacilityDraftToServer();
+		};
+		if (immediate) {
+			runSync();
+		} else {
+			this.draftPersistTimer = setTimeout(runSync, 600);
+		}
+	}
+
+	async syncFacilityDraftToServer() {
+		if (this.creditPolicyDisconnected || !this.hasFacilityDraftValue()) {
+			return;
+		}
+		const rlaId = this.getContextApplicationId();
+		const accountId = this.getContextAccountId();
+		const loanType = this.loanRequestType;
+		if ((!rlaId && !accountId) || !loanType) {
+			return;
+		}
+		try {
+			const facilityForSync = {
+				...(this.facilities[0] || this.buildFacilityPayload()),
+				FSC_Garantias__r: this.guaranteeRows.map((g, idx) => ({
+					...this.serializeGuarantees()[idx],
+					__key: g.__key,
+					...(g.Id ? { Id: g.Id } : {}),
+				})),
+				FSC_Seguros__r: this.insuranceRows.map((s, idx) => ({
+					...this.serializeInsurances()[idx],
+					__key: s.__key,
+					...(s.Id ? { Id: s.Id } : {}),
+				})),
+			};
+			const generalNode = { ...(this.omniJsonData?.DatosGeneralesSolicitud || {}) };
+			delete generalNode.FSC_Facilidades_De_Credito__c;
+
+			const result = await saveFacilityDraft({
+				rlaId: rlaId || null,
+				accountId: accountId || null,
+				loanType,
+				stepGeneralJson: JSON.stringify(generalNode),
+				facilityJson: JSON.stringify(facilityForSync),
+			});
+			if (!result || this.creditPolicyDisconnected) {
+				return;
+			}
+			if (result.rlaId && result.rlaId !== this.persistedDraftRlaId) {
+				this.persistedDraftRlaId = result.rlaId;
+				this.omniApplyCallResp?.({ rlaId: result.rlaId, forceNewDraft: false });
+			}
+			if (result.skippedNonDraft) {
+				return;
+			}
+
+			let idsUpdated = false;
+			const gIds = result.guaranteeIdsByKey || {};
+			if (Object.keys(gIds).length > 0) {
+				this.guaranteeRows = this.guaranteeRows.map((row) => {
+					const newId = gIds[row.__key];
+					if (newId && row.Id !== newId) {
+						idsUpdated = true;
+						return { ...row, Id: newId };
+					}
+					return row;
+				});
+			}
+			const sIds = result.insuranceIdsByKey || {};
+			if (Object.keys(sIds).length > 0) {
+				this.insuranceRows = this.insuranceRows.map((row) => {
+					const newId = sIds[row.__key];
+					if (newId && row.Id !== newId) {
+						idsUpdated = true;
+						return { ...row, Id: newId };
+					}
+					return row;
+				});
+			}
+			if (idsUpdated) {
+				const updatedPayload = this.buildFacilityPayload();
+				this.facilities = [updatedPayload];
+				this.notifyFacilitiesChange();
+				this.mirrorDraftToSessionStorage(updatedPayload);
+			}
+		} catch (error) {
+			this.logPicklistError('guardado proactivo de facilidad en borrador', error);
+		}
 	}
 
 	hasFacilityDraftValue() {
@@ -2377,6 +2626,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 			}
 			this.guaranteeDraft = {
 				__key: row.__key,
+				...(row.Id ? { Id: row.Id } : {}),
 				FSC_MonedaGarantia__c: row.FSC_MonedaGarantia__c || '',
 				FSC_Clase_de_Garantia__c: row.FSC_Clase_de_Garantia__c || '',
 				FSC_Tipo_de_Garantia__c: row.FSC_Tipo_de_Garantia__c || '',
@@ -2421,7 +2671,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 			this.recalculateGuaranteeBasedInsurance();
 			this.updatePlazoMesesValidity();
 			this.recalculateInsuranceDraftPremium();
-			this.persistFacilityDraft();
+			this.persistFacilityDraft(true);
 		}
 	}
 
@@ -2638,8 +2888,13 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 			return;
 		}
 
+		const existingGuaranteeRow = this.guaranteeEditKey
+			? this.guaranteeRows.find((item) => item.__key === this.guaranteeEditKey)
+			: null;
+		const resolvedGuaranteeId = this.guaranteeDraft.Id || existingGuaranteeRow?.Id;
 		const payload = {
 			__key: this.guaranteeEditKey || this.generateRowKey('garantia'),
+			...(resolvedGuaranteeId ? { Id: resolvedGuaranteeId } : {}),
 			FSC_MonedaGarantia__c: currency,
 			Name: `${this.guaranteeDraft.FSC_Tipo_de_Garantia__c || 'Garantia'}`,
 			FSC_Clase_de_Garantia__c: this.guaranteeDraft.FSC_Clase_de_Garantia__c,
@@ -2687,7 +2942,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		this.updatePlazoMesesValidity();
 		this.recalculateGuaranteeBasedInsurance();
 		this.recalculateInsuranceDraftPremium();
-		this.persistFacilityDraft();
+		this.persistFacilityDraft(true);
 	}
 
 	validateGuaranteeConfiguration() {
@@ -2738,6 +2993,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		if (action.name === 'edit') {
 			const nextDraft = {
 				__key: row.__key,
+				...(row.Id ? { Id: row.Id } : {}),
 				FSC_Tipo_de_Seguro__c: row.FSC_Tipo_de_Seguro__c || '',
 				FSC_Monto_de_la_Prima__c: this.normalizeInputValue(row.FSC_Monto_de_la_Prima__c),
 				FSC_Seguro_Desempleo__c: this.normalizeBoolean(row.FSC_Seguro_Desempleo__c),
@@ -2756,7 +3012,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 
 		if (action.name === 'delete') {
 			this.insuranceRows = this.insuranceRows.filter((item) => item.__key !== row.__key);
-			this.persistFacilityDraft();
+			this.persistFacilityDraft(true);
 		}
 	}
 
@@ -2854,8 +3110,13 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 			return;
 		}
 
+		const existingInsuranceRow = this.insuranceEditKey
+			? this.insuranceRows.find((item) => item.__key === this.insuranceEditKey)
+			: null;
+		const resolvedInsuranceId = this.insuranceDraft.Id || existingInsuranceRow?.Id;
 		const payload = {
 			__key: this.insuranceEditKey || this.generateRowKey('seguro'),
+			...(resolvedInsuranceId ? { Id: resolvedInsuranceId } : {}),
 			Name: this.insuranceDraft.FSC_Tipo_de_Seguro__c,
 			FSC_Tipo_de_Seguro__c: this.insuranceDraft.FSC_Tipo_de_Seguro__c,
 			FSC_Monto_de_la_Prima__c: this.normalizeNumberValue(this.insuranceDraft.FSC_Monto_de_la_Prima__c, 2),
@@ -2873,7 +3134,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		}
 
 		this.closeInsuranceEditor();
-		this.persistFacilityDraft();
+		this.persistFacilityDraft(true);
 	}
 
 	closeInsuranceEditor() {
@@ -3109,7 +3370,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	// "Completar información" (fsc_RlaAcciones) envía el Id de la solicitud en c__rlaId, que el OmniScript expone como rlaId.
 	getContextApplicationId() {
 		const source = this.omniJsonData || {};
-		return [source.rlaId, source.c__rlaId].find((value) => String(value || '').startsWith('0cd')) || '';
+		return [this.persistedDraftRlaId, source.rlaId, source.c__rlaId].find((value) => String(value || '').startsWith('0cd')) || '';
 	}
 
 	get hasOmniApplicants() {
@@ -3364,6 +3625,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 
 		return normalizedRows.map((row) => ({
 			__key: row.__key || row.Id || this.generateRowKey('garantia'),
+			...(row.Id ? { Id: row.Id } : {}),
 			FSC_MonedaGarantia__c: row.FSC_MonedaGarantia__c || '',
 			Name: row.Name || '',
 			FSC_Clase_de_Garantia__c: row.FSC_Clase_de_Garantia__c || '',
@@ -3405,6 +3667,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 			const isLifeInsurance = this.isLifeInsuranceType(row.FSC_Tipo_de_Seguro__c);
 			return {
 				__key: row.__key || row.Id || this.generateRowKey('seguro'),
+				...(row.Id ? { Id: row.Id } : {}),
 				Name: row.Name || '',
 				FSC_Tipo_de_Seguro__c: row.FSC_Tipo_de_Seguro__c || '',
 				FSC_Monto_de_la_Prima__c: this.normalizeNumberValue(row.FSC_Monto_de_la_Prima__c, 5),
@@ -3417,6 +3680,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 
 	serializeGuarantees() {
 		return this.guaranteeRows.map((item, index) => ({
+			...(item.Id ? { Id: item.Id } : {}),
 			Name: item.Name || `Garantia ${index + 1}`,
 			...(item.FSC_MonedaGarantia__c ? { FSC_MonedaGarantia__c: item.FSC_MonedaGarantia__c } : {}),
 			FSC_Clase_de_Garantia__c: item.FSC_Clase_de_Garantia__c || '',
@@ -3455,6 +3719,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 		return this.insuranceRows.map((item, index) => {
 			const isLifeInsurance = this.isLifeInsuranceType(item.FSC_Tipo_de_Seguro__c);
 			return {
+				...(item.Id ? { Id: item.Id } : {}),
 				Name: item.Name || `Seguro ${index + 1}`,
 				FSC_Tipo_de_Seguro__c: item.FSC_Tipo_de_Seguro__c || '',
 				FSC_Monto_de_la_Prima__c: this.normalizeNumberValue(item.FSC_Monto_de_la_Prima__c, 5),
@@ -3920,6 +4185,14 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 	disconnectedCallback() {
 		this.creditPolicyDisconnected = true;
 		clearTimeout(this.creditPolicyTimer);
+		if (this.draftPersistTimer) {
+			clearTimeout(this.draftPersistTimer);
+			this.draftPersistTimer = null;
+		}
+		if (this.boundBeforeUnloadHandler) {
+			window.removeEventListener('beforeunload', this.boundBeforeUnloadHandler);
+			this.boundBeforeUnloadHandler = null;
+		}
 	}
 
 	queueCreditPolicyValidation(immediate = false) {
@@ -3948,7 +4221,7 @@ export default class FscLoanFacilityManager extends OmniscriptBaseMixin(Lightnin
 				});
 		};
 		if (immediate) validate();
-		else this.creditPolicyTimer = setTimeout(validate, 1000);
+		else this.creditPolicyTimer = setTimeout(validate, 350);
 	}
 
 	isCurrentCreditPolicyRequest(contextJson) {

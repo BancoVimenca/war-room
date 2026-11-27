@@ -6,12 +6,16 @@ public with sharing class FSC_CreditPolicyGuard {
 	private static final Set<String> APPLICATION_FIELDS = new Set<String>{
 		'AccountId',
 		'RecordTypeId',
+		'Status',
+		'FSC_Subestado__c',
 		'FSC_Monto__c',
 		'FSC_Plazo_meses__c',
 		'FSC_Moneda__c',
 		'FSC_MontoAprobado__c',
 		'FSC_PlazoMesesAprobado__c'
 	};
+	private static final String STATUS_BORRADOR = 'Borrador';
+	private static final String SUBESTADO_COMPLETANDO_INFORMACION = 'Completando información';
 	private static final Set<String> GUARANTEE_FIELDS = new Set<String>{
 		'FSC_Residential_Loan_Application__c',
 		'FSC_Clase_de_Garantia__c',
@@ -35,6 +39,8 @@ public with sharing class FSC_CreditPolicyGuard {
 		List<ResidentialLoanApplication> targets = new List<ResidentialLoanApplication>();
 		Set<Id> ids = new Set<Id>();
 		for (ResidentialLoanApplication record : records) {
+			if (isIncompleteDraft(record))
+				continue;
 			if (loanType(record.RecordTypeId) == '' || !changed(record, previous == null ? null : previous.get(record.Id), APPLICATION_FIELDS))
 				continue;
 			if (
@@ -103,6 +109,9 @@ public with sharing class FSC_CreditPolicyGuard {
 		Map<Id, ResidentialLoanApplication> applications = FSC_CreditPolicyService.applications(ids);
 		Set<Id> policyIds = new Set<Id>();
 		for (ResidentialLoanApplication application : applications.values()) {
+			if (isIncompleteDraft(application)) {
+				continue;
+			}
 			if (loanType(application.RecordTypeId) != '' && application.FSC_Monto__c != null) {
 				policyIds.add(application.Id);
 			}
@@ -114,7 +123,7 @@ public with sharing class FSC_CreditPolicyGuard {
 		List<FSC_CreditPolicyService.Request> requests = new List<FSC_CreditPolicyService.Request>();
 		List<Id> order = new List<Id>();
 		for (ResidentialLoanApplication application : applications.values()) {
-			if (loanType(application.RecordTypeId) == '' || application.FSC_Monto__c == null)
+			if (isIncompleteDraft(application) || loanType(application.RecordTypeId) == '' || application.FSC_Monto__c == null)
 				continue;
 			FSC_CreditPolicyService.Request request = fromApplication(application, grouped.get(application.Id));
 			requests.add(request);
@@ -170,7 +179,7 @@ public with sharing class FSC_CreditPolicyGuard {
 		List<FSC_Facilidades_De_Credito__c> evaluated = new List<FSC_Facilidades_De_Credito__c>();
 		for (FSC_Facilidades_De_Credito__c record : targets) {
 			ResidentialLoanApplication parent = applications.get(record.FSC_Residential_Loan_Application__c);
-			if (parent == null || loanType(parent.RecordTypeId) == '')
+			if (parent == null || isIncompleteDraft(parent) || loanType(parent.RecordTypeId) == '')
 				continue;
 			FSC_CreditPolicyService.Request request = fromApplication(parent, grouped.get(parent.Id));
 			request.amount = record.FSC_Monto_Solicitado__c;
@@ -188,6 +197,14 @@ public with sharing class FSC_CreditPolicyGuard {
 	}
 	private static Boolean bypassed() {
 		return Test.isRunningTest() && bypassInTests;
+	}
+	private static Boolean isIncompleteDraft(ResidentialLoanApplication application) {
+		if (application == null) {
+			return false;
+		}
+		Map<String, Object> populated = application.getPopulatedFieldsAsMap();
+		return populated.get('Status') == STATUS_BORRADOR &&
+			populated.get('FSC_Subestado__c') == SUBESTADO_COMPLETANDO_INFORMACION;
 	}
 	private static Map<Id, List<FSC_CreditPolicyService.Guarantee>> groupedGuarantees(Set<Id> ids) {
 		Map<Id, List<FSC_CreditPolicyService.Guarantee>> grouped = new Map<Id, List<FSC_CreditPolicyService.Guarantee>>();
