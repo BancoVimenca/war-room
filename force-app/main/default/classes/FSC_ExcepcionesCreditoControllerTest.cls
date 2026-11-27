@@ -160,6 +160,27 @@ private class FSC_ExcepcionesCreditoControllerTest {
 		ResidentialLoanApplication solicitud = getSolicitud(RLA_ELEGIBLE);
 		FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion option = getOption(TIPO_NEGOCIOS);
 		forceAuthorization();
+		Id excepcionId = FSC_ExcepcionesCreditoController.solicitarExcepcion(
+			solicitud.Id,
+			option.tipo,
+			option.detalle,
+			'Justificación para aprobar'
+		);
+
+		Test.startTest();
+		FSC_ExcepcionesCreditoController.aprobarExcepcionConCondicion(excepcionId, 'Presentar fiador solidario');
+		Test.stopTest();
+
+		FSC_Excepcion__c conditioned = [SELECT FSC_Estado__c, FSC_Condicion__c FROM FSC_Excepcion__c WHERE Id = :excepcionId];
+		Assert.areEqual('Pendiente', conditioned.FSC_Estado__c, 'Debe permanecer Pendiente esperando respuesta del cliente.');
+		Assert.areEqual('Presentar fiador solidario', conditioned.FSC_Condicion__c, 'Debe almacenar la condición.');
+	}
+
+	@IsTest
+	static void shouldApproveChildDirectlyWhenNoConditionIsGiven() {
+		ResidentialLoanApplication solicitud = getSolicitud(RLA_ELEGIBLE);
+		FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion option = getOption(TIPO_NEGOCIOS);
+		forceAuthorization();
 		Id excepcionId = FSC_ExcepcionesCreditoController.solicitarExcepcion(solicitud.Id, option.tipo, option.detalle, 'Justificación para aprobar');
 
 		Test.startTest();
@@ -293,6 +314,274 @@ private class FSC_ExcepcionesCreditoControllerTest {
 
 		String nullFormatted = FSC_ExcepcionesCreditoController.formatAprobador(null, null);
 		Assert.isNull(nullFormatted, 'Para base nula debe retornar null.');
+	}
+
+	@IsTest
+	static void shouldObserveAndResubmitWithoutClosingLoanApplication() {
+		ResidentialLoanApplication solicitud = getSolicitud(RLA_ELEGIBLE);
+		FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion option = getOption(TIPO_NEGOCIOS);
+		forceAuthorization();
+		Id excepcionId = FSC_ExcepcionesCreditoController.solicitarExcepcion(
+			solicitud.Id,
+			option.tipo,
+			option.detalle,
+			'Justificación inicial incompleta'
+		);
+
+		Test.startTest();
+		FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion(
+			excepcionId,
+			'  Favor indicar cantidad de moras, entidad y tipo de facilidad  '
+		);
+
+		FSC_Excepcion__c observada = [
+			SELECT FSC_Estado__c, FSC_Observaciones_Aprobador__c, FSC_Paso_Observacion__c, FSC_Motivo__c
+			FROM FSC_Excepcion__c
+			WHERE Id = :excepcionId
+		];
+		ResidentialLoanApplication solicitudTrasObservar = [
+			SELECT Status, FSC_Subestado__c
+			FROM ResidentialLoanApplication
+			WHERE Id = :solicitud.Id
+		];
+		Map<String, Object> ctxObservada = FSC_ExcepcionesCreditoController.getContextoExcepcion(solicitud.Id);
+
+		Assert.areEqual('Observada', observada.FSC_Estado__c, 'La excepción debe pasar a estado Observada.');
+		Assert.areEqual(
+			'Favor indicar cantidad de moras, entidad y tipo de facilidad',
+			observada.FSC_Observaciones_Aprobador__c,
+			'Debe persistir la observación normalizada.'
+		);
+		Assert.isNotNull(observada.FSC_Paso_Observacion__c, 'Debe registrar el aprobador que observó.');
+		Assert.areEqual('En proceso', solicitudTrasObservar.Status, 'La devolución con observación NO debe cerrar la solicitud padre.');
+		Assert.areEqual('Observada', ctxObservada.get('estado'), 'El contexto debe exponer el estado Observada.');
+		Assert.areEqual(true, ctxObservada.get('tienePendientes'), 'Observada debe seguir bloqueando el avance ordinario.');
+		Assert.areEqual(true, ctxObservada.get('puedeSubsanarObservacion'), 'El oficial debe poder subsanar la excepción.');
+		Assert.areEqual(false, ctxObservada.get('hasActiveApproval'), 'No debe tener workitem activo mientras está observada.');
+
+		FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(
+			excepcionId,
+			'  Posee 5 moras a 30 días en Scotiabank ya solventadas con carta saldo  '
+		);
+		Test.stopTest();
+
+		FSC_Excepcion__c reenviada = [
+			SELECT FSC_Estado__c, FSC_Motivo__c, FSC_Observaciones_Aprobador__c
+			FROM FSC_Excepcion__c
+			WHERE Id = :excepcionId
+		];
+		Map<String, Object> ctxReenviada = FSC_ExcepcionesCreditoController.getContextoExcepcion(solicitud.Id);
+		Assert.areEqual('Pendiente', reenviada.FSC_Estado__c, 'Tras subsanar debe regresar a estado Pendiente.');
+		Assert.areEqual(
+			'Posee 5 moras a 30 días en Scotiabank ya solventadas con carta saldo',
+			reenviada.FSC_Motivo__c,
+			'Debe actualizar el motivo subsanado.'
+		);
+		Assert.areEqual(true, ctxReenviada.get('hasActiveApproval'), 'Debe generar una nueva instancia de aprobación activa.');
+		Assert.areEqual(1, (Integer) ctxReenviada.get('cantidad'), 'No debe consumir cupos adicionales de excepción.');
+	}
+
+	@IsTest
+	static void shouldValidateObservationAndResubmitGuardConditions() {
+		ResidentialLoanApplication solicitud = getSolicitud(RLA_ELEGIBLE);
+		FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion option = getOption(TIPO_NEGOCIOS);
+		forceAuthorization();
+		Id excepcionId = FSC_ExcepcionesCreditoController.solicitarExcepcion(
+			solicitud.Id,
+			option.tipo,
+			option.detalle,
+			'Justificación para validar guardias'
+		);
+
+		Test.startTest();
+		try {
+			FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion(excepcionId, '   ');
+			Assert.fail('Debe rechazar observación en blanco.');
+		} catch (AuraHandledException exBlank) {
+			Assert.isNotNull(exBlank);
+		}
+
+		try {
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(excepcionId, 'Intento sobre pendiente');
+			Assert.fail('No debe permitir subsanar una excepción que no está en estado Observada.');
+		} catch (AuraHandledException exInvalidState) {
+			Assert.isNotNull(exInvalidState);
+		}
+
+		try {
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(excepcionId, ' ');
+			Assert.fail('Debe exigir descripción al subsanar.');
+		} catch (AuraHandledException exEmptyDesc) {
+			Assert.isNotNull(exEmptyDesc);
+		}
+		Test.stopTest();
+	}
+
+	@IsTest
+	static void shouldPreventSubmitterFromApprovingOwnExceptionWhenReassigned() {
+		Profile vimencaProfile = [
+			SELECT Id
+			FROM Profile
+			WHERE Name = 'Perfil Vimenca'
+			LIMIT 1
+		];
+		PermissionSetGroup psgSolCred = [
+			SELECT Id, Status
+			FROM PermissionSetGroup
+			WHERE DeveloperName = 'FSC_PSG_SolCred'
+			LIMIT 1
+		];
+		if (psgSolCred.Status != 'Updated') {
+			Test.calculatePermissionSetGroup(psgSolCred.Id);
+		}
+
+		String oficina = null;
+		for (Schema.PicklistEntry entry : User.USE_Oficina__c.getDescribe().getPicklistValues()) {
+			if (entry.isActive()) {
+				oficina = entry.getValue();
+				break;
+			}
+		}
+		String uniqueToken = String.valueOf(DateTime.now().getTime());
+		User regularUser = new User(
+			FirstName = 'Oficial',
+			LastName = 'PruebaAutoAprobacion',
+			Alias = 'ofauto',
+			Email = 'oficial.auto.' + uniqueToken + '@bv.com.do.test',
+			Username = 'oficial.auto.' + uniqueToken + '@bv.com.do.test',
+			ProfileId = vimencaProfile.Id,
+			TimeZoneSidKey = 'America/Santo_Domingo',
+			LocaleSidKey = 'es_DO',
+			EmailEncodingKey = 'UTF-8',
+			LanguageLocaleKey = 'es',
+			USE_Codigo__c = 'OFAUTO',
+			USE_Oficina__c = oficina,
+			Canal_Atencion__c = 'TELEASISTENCIA'
+		);
+		User secondApproverUser = new User(
+			FirstName = 'Gerente',
+			LastName = 'PruebaColaExcepcion',
+			Alias = 'gecola',
+			Email = 'gerente.cola.' + uniqueToken + '@bv.com.do.test',
+			Username = 'gerente.cola.' + uniqueToken + '@bv.com.do.test',
+			ProfileId = vimencaProfile.Id,
+			TimeZoneSidKey = 'America/Santo_Domingo',
+			LocaleSidKey = 'es_DO',
+			EmailEncodingKey = 'UTF-8',
+			LanguageLocaleKey = 'es',
+			USE_Codigo__c = 'GECOLA',
+			USE_Oficina__c = oficina,
+			Canal_Atencion__c = 'TELEASISTENCIA'
+		);
+		Group subGroup = new Group(Name = 'Subgrupo Excepcion ' + uniqueToken.right(5), Type = 'Regular');
+		Group parentQueue = new Group(Name = 'Cola Excepcion ' + uniqueToken.right(5), Type = 'Queue');
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+			insert new Datos_Maestros__c(Name = 'Oficina test auto', DM_Codigo_Oficina__c = oficina, DM_Tipo__c = 'Oficina');
+			insert new List<User>{ regularUser, secondApproverUser };
+			insert new PermissionSetAssignment(AssigneeId = regularUser.Id, PermissionSetGroupId = psgSolCred.Id);
+			PermissionSet psOficial = [SELECT Id FROM PermissionSet WHERE Name = 'FSC_PS_Oficial_Negocio' LIMIT 1];
+			insert new PermissionSetAssignment(AssigneeId = regularUser.Id, PermissionSetId = psOficial.Id);
+
+			insert subGroup;
+			insert parentQueue;
+			insert new QueueSobject(QueueId = parentQueue.Id, SobjectType = 'Case');
+			insert new GroupMember(GroupId = subGroup.Id, UserOrGroupId = secondApproverUser.Id);
+			insert new GroupMember(GroupId = parentQueue.Id, UserOrGroupId = subGroup.Id);
+		}
+
+		ResidentialLoanApplication solicitud = getSolicitud(RLA_ELEGIBLE);
+		update new ResidentialLoanApplication(Id = solicitud.Id, OwnerId = regularUser.Id);
+		FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion option = getOption(TIPO_NEGOCIOS);
+		FSC_Excepcion__c exc = new FSC_Excepcion__c(
+			FSC_Solicitud_Prestamo__c = solicitud.Id,
+			FSC_Tipo__c = option.tipo,
+			FSC_Detalle__c = option.detalle,
+			FSC_Motivo__c = 'Motivo de oficial',
+			FSC_Estado__c = 'Pendiente'
+		);
+		insert exc;
+
+		System.runAs(regularUser) {
+			FSC_ExcepcionApprovalService.submit(exc.Id);
+		}
+
+		// Probar devolución con observación enviando notificación al Owner distinto
+		forceAuthorization();
+		FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion(exc.Id, 'Aclarar motivo');
+		System.runAs(regularUser) {
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(exc.Id, 'Motivo aclarado por oficial');
+		}
+
+		ProcessInstanceWorkitem wi = [
+			SELECT Id, ActorId
+			FROM ProcessInstanceWorkitem
+			WHERE ProcessInstance.TargetObjectId = :exc.Id
+			LIMIT 1
+		];
+
+		FSC_ExcepcionesCreditoController.testForceAuthorized = false;
+		FSC_ExcepcionApprovalService.testForceAuthorized = false;
+
+		Test.startTest();
+		// 1. Verificar resolución de grupos anidados (Queue -> Regular Group -> secondApproverUser)
+		wi.ActorId = parentQueue.Id;
+		update wi;
+		System.runAs(secondApproverUser) {
+			Map<Id, List<ProcessInstanceWorkitem>> queueWiMap = FSC_ExcepcionApprovalService.getWorkItemsByTarget(new Set<Id>{ exc.Id });
+			Assert.isTrue(
+				FSC_ExcepcionApprovalService.canCurrentUserAct(queueWiMap.get(exc.Id)),
+				'El miembro del grupo anidado dentro de la cola debe estar autorizado.'
+			);
+			Set<Id> queueActionable = FSC_ExcepcionApprovalService.getActionableTargetIds(queueWiMap);
+			Assert.isTrue(queueActionable.contains(exc.Id), 'El aprobador legítimo distinto al submitter debe poder actuar.');
+		}
+
+		// 2. Verificar bloqueo de usuario no perteneciente a la cola
+		System.runAs(regularUser) {
+			try {
+				FSC_ExcepcionApprovalService.assertCurrentUserCanAct(exc.Id);
+				Assert.fail('Usuario ajeno a la cola no debe poder actuar.');
+			} catch (AuraHandledException exNotAssigned) {
+				Assert.isNotNull(exNotAssigned);
+			}
+		}
+
+		// 3. Simular que un gerente reasigna por error el Workitem al mismo oficial solicitante
+		wi.ActorId = regularUser.Id;
+		update wi;
+
+		System.runAs(regularUser) {
+			Assert.isTrue(FSC_ExcepcionApprovalService.canCurrentUserAct(wi), 'canCurrentUserAct evalúa membresía directa.');
+			Assert.isFalse(FSC_ExcepcionApprovalService.canCurrentUserAct((ProcessInstanceWorkitem) null), 'Workitem nulo debe ser false.');
+			Assert.isTrue(FSC_ExcepcionApprovalService.hasActiveWorkItem(exc.Id), 'Debe reportar workitem activo.');
+			Assert.isFalse(FSC_ExcepcionApprovalService.hasActiveWorkItem(null), 'Id nulo debe reportar false.');
+			Assert.isTrue(FSC_ExcepcionApprovalService.getActionableTargetIds(null).isEmpty(), 'Mapa nulo debe retornar vacío.');
+			Map<Id, List<ProcessInstanceWorkitem>> wiMap = FSC_ExcepcionApprovalService.getWorkItemsByTarget(new Set<Id>{ exc.Id });
+			Set<Id> actionableIds = FSC_ExcepcionApprovalService.getActionableTargetIds(wiMap);
+			Assert.isFalse(actionableIds.contains(exc.Id), 'El solicitante no debe ver su propia excepción como accionable para aprobar.');
+
+			try {
+				FSC_ExcepcionApprovalService.assertCurrentUserCanAct(null);
+				Assert.fail('Debe validar Id nulo.');
+			} catch (AuraHandledException exNull) {
+				Assert.isNotNull(exNull);
+			}
+
+			try {
+				FSC_ExcepcionApprovalService.assertCurrentUserCanAct(exc.Id);
+				Assert.fail('Debe bloquear assertCurrentUserCanAct del solicitante.');
+			} catch (AuraHandledException exAssert) {
+				Assert.isNotNull(exAssert);
+			}
+
+			try {
+				FSC_ExcepcionApprovalService.process(exc.Id, 'Approve', 'Intento autoaprobación');
+				Assert.fail('Debe bloquear la autoaprobación del solicitante.');
+			} catch (AuraHandledException exSelfApprove) {
+				Assert.isNotNull(exSelfApprove, 'Debe lanzar excepción controlada ante autoaprobación.');
+			}
+		}
+		Test.stopTest();
 	}
 
 	private static void forceAuthorization() {
