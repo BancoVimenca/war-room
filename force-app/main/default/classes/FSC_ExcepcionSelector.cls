@@ -18,7 +18,21 @@ public inherited sharing class FSC_ExcepcionSelector {
 			return new List<FSC_Excepcion__c>();
 		}
 		return [
-			SELECT Id, Name, FSC_Solicitud_Prestamo__c, FSC_Tipo__c, FSC_Detalle__c, FSC_Motivo__c, FSC_Estado__c, FSC_Condicion__c, CreatedDate
+			SELECT
+				Id,
+				Name,
+				FSC_Solicitud_Prestamo__c,
+				FSC_Solicitud_Prestamo__r.Name,
+				FSC_Solicitud_Prestamo__r.OwnerId,
+				FSC_Tipo__c,
+				FSC_Detalle__c,
+				FSC_Motivo__c,
+				FSC_Estado__c,
+				FSC_Condicion__c,
+				FSC_Observaciones_Aprobador__c,
+				FSC_Paso_Observacion__c,
+				CreatedById,
+				CreatedDate
 			FROM FSC_Excepcion__c
 			WHERE FSC_Solicitud_Prestamo__c = :solicitudId
 			WITH USER_MODE
@@ -31,7 +45,20 @@ public inherited sharing class FSC_ExcepcionSelector {
 			return null;
 		}
 		List<FSC_Excepcion__c> excepciones = [
-			SELECT Id, FSC_Solicitud_Prestamo__c, FSC_Tipo__c, FSC_Detalle__c, FSC_Motivo__c, FSC_Estado__c, FSC_Condicion__c
+			SELECT
+				Id,
+				Name,
+				FSC_Solicitud_Prestamo__c,
+				FSC_Solicitud_Prestamo__r.Name,
+				FSC_Solicitud_Prestamo__r.OwnerId,
+				FSC_Tipo__c,
+				FSC_Detalle__c,
+				FSC_Motivo__c,
+				FSC_Estado__c,
+				FSC_Condicion__c,
+				FSC_Observaciones_Aprobador__c,
+				FSC_Paso_Observacion__c,
+				CreatedById
 			FROM FSC_Excepcion__c
 			WHERE Id = :excepcionId
 			WITH USER_MODE
@@ -45,7 +72,16 @@ public inherited sharing class FSC_ExcepcionSelector {
 			return new List<ProcessInstanceWorkitem>();
 		}
 		return [
-			SELECT Id, ActorId, Actor.Name, OriginalActorId, OriginalActor.Name, ProcessInstance.TargetObjectId, ProcessInstance.ProcessDefinition.DeveloperName, CreatedDate
+			SELECT
+				Id,
+				ActorId,
+				Actor.Name,
+				OriginalActorId,
+				OriginalActor.Name,
+				ProcessInstance.TargetObjectId,
+				ProcessInstance.SubmittedById,
+				ProcessInstance.ProcessDefinition.DeveloperName,
+				CreatedDate
 			FROM ProcessInstanceWorkitem
 			WHERE ProcessInstance.TargetObjectId IN :targetIds
 			WITH SYSTEM_MODE

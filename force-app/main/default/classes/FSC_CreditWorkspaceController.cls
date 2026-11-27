@@ -88,7 +88,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		for (FSC_Excepcion__c exc : [
 			SELECT Id, FSC_Solicitud_Prestamo__c
 			FROM FSC_Excepcion__c
-			WHERE FSC_Estado__c = 'Pendiente'
+			WHERE FSC_Estado__c IN ('Pendiente', 'Observada')
 			WITH USER_MODE
 			LIMIT 500
 		]) {
@@ -234,7 +234,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		for (FSC_Excepcion__c exc : [
 			SELECT Id, FSC_Solicitud_Prestamo__c, FSC_Tipo__c, FSC_Detalle__c, FSC_Estado__c
 			FROM FSC_Excepcion__c
-			WHERE FSC_Estado__c = 'Pendiente'
+			WHERE FSC_Estado__c IN ('Pendiente', 'Observada')
 			WITH USER_MODE
 			LIMIT 1000
 		]) {
