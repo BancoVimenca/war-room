@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>FSC_ExcepcionesCreditoController</members>
+        <members>FSC_ExcepcionesCreditoControllerTest</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>FSC_Excepcion_Record_Page</members>
+        <name>FlexiPage</name>
+    </types>
+    <types>
+        <members>FSC_Excepcion__c-Excepción Layout</members>
+        <name>Layout</name>
+    </types>
+    <types>
+        <members>fsc_ApprovalHistory</members>
+        <members>fsc_ExcepcionAcciones</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <version>65.0</version>
+</Package>

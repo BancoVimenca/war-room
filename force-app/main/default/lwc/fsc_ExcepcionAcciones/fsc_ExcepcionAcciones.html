@@ -1,0 +1,209 @@
+<template>
+	<lightning-card class="actionsCard">
+		<div slot="title" class="cardTitle">Acciones de la excepción</div>
+		<div class="container">
+			<template if:true={loading}>
+				<lightning-spinner alternative-text="Procesando..." size="small"></lightning-spinner>
+			</template>
+
+			<template if:true={showBannerPendiente}>
+				<div class="banner warning">
+					<span>⚠️</span>
+					<span>{mensajePendiente}</span>
+				</div>
+			</template>
+
+			<template if:true={showBannerObservada}>
+				<div class="banner warning">
+					<span>⚠️</span>
+					<span>{mensajeObservada}</span>
+				</div>
+			</template>
+
+			<template if:true={showBannerCondicion}>
+				<div class="banner warning">
+					<span>⚠️</span>
+					<span>Aprobada con condición ({ctx.condicion}). Pendiente de respuesta del cliente.</span>
+				</div>
+			</template>
+
+			<template if:true={showBannerAprobada}>
+				<div class="banner success">
+					<span>✅</span>
+					<span>Esta excepción ya se encuentra aprobada.</span>
+				</div>
+			</template>
+
+			<template if:true={showBannerRechazada}>
+				<div class="banner error">
+					<span>⛔</span>
+					<span>Esta excepción fue rechazada.</span>
+				</div>
+			</template>
+
+			<template if:true={showAccionesAprobador}>
+				<div class="btnStack">
+					<lightning-button
+						variant="brand"
+						label="Aprobar"
+						onclick={handleAprobar}
+						disabled={loading}>
+					</lightning-button>
+					<lightning-button
+						variant="neutral"
+						label="Aprobar con condición"
+						onclick={openModalCondicion}
+						disabled={loading}>
+					</lightning-button>
+					<lightning-button
+						variant="neutral"
+						label="Devolver con observaciones"
+						onclick={openModalObservar}
+						disabled={loading}>
+					</lightning-button>
+					<lightning-button
+						variant="destructive"
+						label="Rechazar excepción"
+						onclick={openModalRechazar}
+						disabled={loading}>
+					</lightning-button>
+				</div>
+			</template>
+
+			<template if:true={showSubsanar}>
+				<div class="btnStack">
+					<lightning-button
+						variant="brand"
+						label="Subsanar y reenviar excepción"
+						onclick={openModalSubsanar}
+						disabled={loading}>
+					</lightning-button>
+				</div>
+			</template>
+
+			<template if:true={showRespuestaCondicion}>
+				<div class="btnStack">
+					<lightning-button
+						variant="brand"
+						label="Cliente aprueba condición"
+						onclick={handleClienteAprueba}
+						disabled={loading}>
+					</lightning-button>
+					<lightning-button
+						variant="destructive"
+						label="Cliente no aprueba condición"
+						onclick={handleClienteRechaza}
+						disabled={loading}>
+					</lightning-button>
+				</div>
+			</template>
+		</div>
+	</lightning-card>
+
+	<!-- Modal: Aprobar con condición -->
+	<template if:true={showModalCondicion}>
+		<section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2 class="slds-text-heading_medium">Aprobar excepción con condición</h2>
+				</header>
+				<div class="slds-modal__content slds-p-around_medium">
+					<lightning-textarea
+						label="Condición"
+						value={condicionInput}
+						onchange={handleCondicionChange}
+						max-length="32768"
+						required>
+					</lightning-textarea>
+				</div>
+				<footer class="slds-modal__footer">
+					<lightning-button variant="neutral" label="Cancelar" onclick={closeModalCondicion}></lightning-button>
+					<lightning-button class="slds-m-left_x-small" variant="brand" label="Aprobar con condición" onclick={handleConfirmarCondicion}></lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<!-- Modal: Devolver con observaciones -->
+	<template if:true={showModalObservar}>
+		<section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2 class="slds-text-heading_medium">Devolver excepción con observaciones</h2>
+				</header>
+				<div class="slds-modal__content slds-p-around_medium">
+					<p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+						La excepción regresará al Oficial de Negocio para subsanación sin rechazar ni cerrar la solicitud de crédito.
+					</p>
+					<lightning-textarea
+						label="Observaciones para el Oficial de Negocio"
+						value={observacionesInput}
+						onchange={handleObservacionesChange}
+						max-length="32768"
+						required>
+					</lightning-textarea>
+				</div>
+				<footer class="slds-modal__footer">
+					<lightning-button variant="neutral" label="Cancelar" onclick={closeModalObservar}></lightning-button>
+					<lightning-button class="slds-m-left_x-small" variant="brand" label="Devolver con observaciones" onclick={handleConfirmarObservar}></lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<!-- Modal: Rechazar excepción -->
+	<template if:true={showModalRechazar}>
+		<section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2 class="slds-text-heading_medium">Rechazar excepción</h2>
+				</header>
+				<div class="slds-modal__content slds-p-around_medium">
+					<lightning-textarea
+						label="Motivo"
+						value={motivoRechazoInput}
+						onchange={handleMotivoRechazoChange}
+						max-length="255"
+						required>
+					</lightning-textarea>
+				</div>
+				<footer class="slds-modal__footer">
+					<lightning-button variant="neutral" label="Cancelar" onclick={closeModalRechazar}></lightning-button>
+					<lightning-button class="slds-m-left_x-small" variant="destructive" label="Rechazar excepción" onclick={handleConfirmarRechazar}></lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<!-- Modal: Subsanar y reenviar -->
+	<template if:true={showModalSubsanar}>
+		<section role="dialog" tabindex="-1" aria-modal="true" class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2 class="slds-text-heading_medium">Subsanar y reenviar excepción</h2>
+				</header>
+				<div class="slds-modal__content slds-p-around_medium">
+					<div class="slds-box slds-theme_warning slds-m-bottom_medium">
+						<p class="slds-text-title_bold">Observaciones del aprobador:</p>
+						<p class="slds-m-top_xx-small">{ctx.observaciones}</p>
+					</div>
+					<lightning-textarea
+						label="Descripción / Justificación actualizada de la excepción"
+						value={subsanacionInput}
+						onchange={handleSubsanacionChange}
+						max-length="32768"
+						required>
+					</lightning-textarea>
+				</div>
+				<footer class="slds-modal__footer">
+					<lightning-button variant="neutral" label="Cancelar" onclick={closeModalSubsanar}></lightning-button>
+					<lightning-button class="slds-m-left_x-small" variant="brand" label="Subsanar y reenviar" onclick={handleConfirmarSubsanar}></lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+</template>
