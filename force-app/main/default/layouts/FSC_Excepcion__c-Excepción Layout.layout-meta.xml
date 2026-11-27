@@ -11,7 +11,7 @@
                 <field>FSC_Solicitud_Prestamo__c</field>
             </layoutItems>
             <layoutItems>
-                <behavior>Required</behavior>
+                <behavior>Readonly</behavior>
                 <field>FSC_Estado__c</field>
             </layoutItems>
             <layoutItems>
@@ -29,11 +29,11 @@
                 <field>FSC_Condicion__c</field>
             </layoutItems>
             <layoutItems>
-                <behavior>Readonly</behavior>
+                <behavior>Edit</behavior>
                 <field>FSC_Detalle__c</field>
             </layoutItems>
             <layoutItems>
-                <behavior>Readonly</behavior>
+                <behavior>Edit</behavior>
                 <field>FSC_Motivo__c</field>
             </layoutItems>
             <layoutItems>
