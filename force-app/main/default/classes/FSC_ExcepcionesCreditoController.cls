@@ -103,6 +103,52 @@ public with sharing class FSC_ExcepcionesCreditoController {
 	}
 
 	@AuraEnabled(cacheable=true)
+	public static Map<String, Object> getContextoPorExcepcion(Id excepcionId) {
+		TargetSnapshot selected = requireTarget(excepcionId);
+		ResidentialLoanApplication solicitud = requireSolicitud(selected.solicitudId);
+		Set<Id> targetIds = new Set<Id>{ selected.targetId };
+		Map<Id, List<ProcessInstanceWorkitem>> workItemsByTarget = FSC_ExcepcionApprovalService.getWorkItemsByTarget(targetIds);
+		Set<Id> actionableTargetIds = FSC_ExcepcionApprovalService.getActionableTargetIds(workItemsByTarget);
+		List<ProcessInstanceWorkitem> selectedWorkItems = workItemsByTarget.containsKey(selected.targetId)
+			? workItemsByTarget.get(selected.targetId)
+			: new List<ProcessInstanceWorkitem>();
+		Boolean hasActiveApproval = !selectedWorkItems.isEmpty();
+		String aprobadorActual = null;
+		if (hasActiveApproval) {
+			ProcessInstanceWorkitem firstWi = selectedWorkItems[0];
+			Id actorId = firstWi.ActorId != null ? firstWi.ActorId : firstWi.OriginalActorId;
+			String baseName = String.isNotBlank(firstWi.Actor?.Name) ? firstWi.Actor.Name : firstWi.OriginalActor?.Name;
+			aprobadorActual = formatAprobador(actorId, baseName);
+		}
+		Boolean autorizadoSolicitud = isOficialOAdministrador();
+
+		return new Map<String, Object>{
+			'excepcionId' => selected.targetId,
+			'solicitudId' => selected.solicitudId,
+			'solicitudName' => selected.solicitudName,
+			'estado' => selected.estado ?? ESTADO_NO_APLICA,
+			'condicion' => selected.condicion,
+			'observaciones' => selected.observaciones,
+			'pasoObservacion' => selected.pasoObservacion,
+			'motivo' => selected.motivo,
+			'tipo' => selected.tipo,
+			'detalle' => selected.detalle,
+			'hasActiveApproval' => hasActiveApproval,
+			'aprobadorActual' => aprobadorActual,
+			'canActOnApproval' => actionableTargetIds.contains(selected.targetId),
+			'puedeResponderCondicion' => autorizadoSolicitud &&
+			selected.estado == ESTADO_PENDIENTE &&
+			String.isNotBlank(selected.condicion) &&
+			!hasActiveApproval &&
+			isSolicitudElegible(solicitud),
+			'puedeSubsanarObservacion' => autorizadoSolicitud &&
+			selected.estado == ESTADO_OBSERVADA &&
+			!hasActiveApproval &&
+			isSolicitudElegible(solicitud)
+		};
+	}
+
+	@AuraEnabled(cacheable=true)
 	public static List<FSC_OpcionExcepcion> getOpcionesExcepcion() {
 		List<FSC_OpcionExcepcion> opciones = new List<FSC_OpcionExcepcion>();
 		for (FSC_ExcepcionesDeCredito__mdt configuracion : FSC_ExcepcionesDeCredito__mdt.getAll().values()) {

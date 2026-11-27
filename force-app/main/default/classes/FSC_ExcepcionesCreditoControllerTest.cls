@@ -371,6 +371,7 @@ private class FSC_ExcepcionesCreditoControllerTest {
 			WHERE Id = :excepcionId
 		];
 		Map<String, Object> ctxReenviada = FSC_ExcepcionesCreditoController.getContextoExcepcion(solicitud.Id);
+		Map<String, Object> ctxDirectoExcepcion = FSC_ExcepcionesCreditoController.getContextoPorExcepcion(excepcionId);
 		Assert.areEqual('Pendiente', reenviada.FSC_Estado__c, 'Tras subsanar debe regresar a estado Pendiente.');
 		Assert.areEqual(
 			'Posee 5 moras a 30 días en Scotiabank ya solventadas con carta saldo',
@@ -379,6 +380,9 @@ private class FSC_ExcepcionesCreditoControllerTest {
 		);
 		Assert.areEqual(true, ctxReenviada.get('hasActiveApproval'), 'Debe generar una nueva instancia de aprobación activa.');
 		Assert.areEqual(1, (Integer) ctxReenviada.get('cantidad'), 'No debe consumir cupos adicionales de excepción.');
+		Assert.areEqual(excepcionId, ctxDirectoExcepcion.get('excepcionId'), 'getContextoPorExcepcion debe devolver la excepción consultada.');
+		Assert.areEqual('Pendiente', ctxDirectoExcepcion.get('estado'), 'getContextoPorExcepcion debe reflejar el estado actual.');
+		Assert.areEqual(true, ctxDirectoExcepcion.get('canActOnApproval'), 'getContextoPorExcepcion debe habilitar las acciones al aprobador.');
 	}
 
 	@IsTest
