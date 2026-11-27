@@ -7,6 +7,8 @@ public with sharing class FSC_ExcepcionesCreditoController {
 	private static final String ESTADO_PENDIENTE = 'Pendiente';
 	private static final String ESTADO_APROBADA = 'Aprobada';
 	private static final String ESTADO_RECHAZADA = 'Rechazada';
+	private static final String ESTADO_OBSERVADA = 'Observada';
+	private static final String NOTIFICATION_TYPE_DEVOLUCION = 'FSC_DevolucionNegocio';
 	private static final String TIPO_NEGOCIOS = 'Excepciones de Negocios';
 	private static final String SUBESTADO_RECHAZADA_ANALISTA = 'Rechazado por análisis';
 	private static final String SUBESTADO_RECHAZADA_CLIENTE = 'Rechazada por cliente';
@@ -27,8 +29,14 @@ public with sharing class FSC_ExcepcionesCreditoController {
 
 	private class TargetSnapshot {
 		private Id targetId;
+		private Id solicitudId;
+		private String solicitudName;
+		private Id solicitudOwnerId;
 		private String estado;
 		private String condicion;
+		private String observaciones;
+		private String pasoObservacion;
+		private String motivo;
 		private String tipo;
 		private String detalle;
 	}
@@ -70,6 +78,9 @@ public with sharing class FSC_ExcepcionesCreditoController {
 			'limiteAlcanzado' => cantidad >= maximoExcepciones,
 			'estado' => selected?.estado ?? ESTADO_NO_APLICA,
 			'condicion' => selected?.condicion,
+			'observaciones' => selected?.observaciones,
+			'pasoObservacion' => selected?.pasoObservacion,
+			'motivo' => selected?.motivo,
 			'tipo' => selected?.tipo,
 			'detalle' => selected?.detalle,
 			'tienePendientes' => tienePendientes,
@@ -83,6 +94,10 @@ public with sharing class FSC_ExcepcionesCreditoController {
 			selected != null &&
 			selected.estado == ESTADO_PENDIENTE &&
 			String.isNotBlank(selected.condicion) &&
+			!hasActiveApproval,
+			'puedeSubsanarObservacion' => autorizadoSolicitud &&
+			selected != null &&
+			selected.estado == ESTADO_OBSERVADA &&
 			!hasActiveApproval
 		};
 	}
@@ -209,6 +224,90 @@ public with sharing class FSC_ExcepcionesCreditoController {
 		}
 	}
 
+	@AuraEnabled
+	public static void devolverExcepcionConObservacion(Id excepcionId, String observaciones) {
+		if (String.isBlank(observaciones)) {
+			throw new AuraHandledException('Las observaciones son requeridas para devolver la excepción.');
+		}
+		String obsNormalizadas = observaciones.trim();
+		if (obsNormalizadas.length() > 32768) {
+			throw new AuraHandledException('Las observaciones exceden el máximo permitido.');
+		}
+
+		TargetSnapshot target = requireTarget(excepcionId);
+		ProcessInstanceWorkitem workItem = FSC_ExcepcionApprovalService.getActiveActionableWorkItem(excepcionId);
+		String baseActorName = String.isNotBlank(workItem.Actor?.Name)
+			? workItem.Actor.Name
+			: (String.isNotBlank(workItem.OriginalActor?.Name) ? workItem.OriginalActor.Name : UserInfo.getName());
+		String pasoOrigen = (baseActorName + ' - ' + UserInfo.getName()).left(255);
+
+		String comentarioHistorial = 'Devuelta con observaciones al oficial: ' + obsNormalizadas;
+		if (comentarioHistorial.length() > LONGITUD_COMENTARIO_APROBACION) {
+			comentarioHistorial = comentarioHistorial.substring(0, LONGITUD_COMENTARIO_APROBACION);
+		}
+
+		FSC_ExcepcionTriggerHandler.setObservationBypass(excepcionId);
+		try {
+			Approval.ProcessResult result = FSC_ExcepcionApprovalService.process(excepcionId, 'Reject', comentarioHistorial);
+			if (result.getInstanceStatus() != 'Rejected') {
+				throw new AuraHandledException('No se pudo retirar la aprobación para registrar las observaciones.');
+			}
+			Database.update(
+				new FSC_Excepcion__c(
+					Id = excepcionId,
+					FSC_Estado__c = ESTADO_OBSERVADA,
+					FSC_Observaciones_Aprobador__c = obsNormalizadas,
+					FSC_Paso_Observacion__c = pasoOrigen
+				),
+				AccessLevel.SYSTEM_MODE
+			);
+		} finally {
+			FSC_ExcepcionTriggerHandler.clearObservationBypass(excepcionId);
+		}
+
+		notifyOwnerExceptionObserved(target, obsNormalizadas);
+	}
+
+	@AuraEnabled
+	public static void subsanarYReenviarExcepcion(Id excepcionId, String nuevaDescripcion) {
+		validateOficialOAdministrador();
+		if (excepcionId == null || String.isBlank(nuevaDescripcion)) {
+			throw new AuraHandledException('La descripción subsanada de la excepción es obligatoria.');
+		}
+		String descripcionNormalizada = nuevaDescripcion.trim();
+		if (descripcionNormalizada.length() > 32768) {
+			throw new AuraHandledException('La descripción excede el máximo permitido.');
+		}
+
+		TargetSnapshot target = requireTarget(excepcionId);
+		if (target.estado != ESTADO_OBSERVADA) {
+			throw new AuraHandledException('Solo se puede subsanar una excepción en estado Observada.');
+		}
+		if (FSC_ExcepcionApprovalService.hasActiveWorkItem(excepcionId)) {
+			throw new AuraHandledException('La excepción ya cuenta con una aprobación activa.');
+		}
+
+		ResidentialLoanApplication solicitud = requireSolicitud(target.solicitudId);
+		if (!isSolicitudElegible(solicitud)) {
+			throw new AuraHandledException('La solicitud debe estar En proceso y en uno de los subestados habilitados para reenviar la excepción.');
+		}
+
+		Database.update(
+			new FSC_Excepcion__c(
+				Id = excepcionId,
+				FSC_Motivo__c = descripcionNormalizada,
+				FSC_Estado__c = ESTADO_PENDIENTE
+			),
+			AccessLevel.SYSTEM_MODE
+		);
+
+		String comentarioReenvio = 'Excepción subsanada y reenviada por ' + UserInfo.getName() + '.';
+		if (comentarioReenvio.length() > LONGITUD_COMENTARIO_APROBACION) {
+			comentarioReenvio = comentarioReenvio.substring(0, LONGITUD_COMENTARIO_APROBACION);
+		}
+		FSC_ExcepcionApprovalService.submit(excepcionId, comentarioReenvio);
+	}
+
 	private static TargetSnapshot selectCurrentTarget(
 		List<FSC_Excepcion__c> excepciones,
 		Map<Id, List<ProcessInstanceWorkitem>> workItemsByTarget,
@@ -216,6 +315,11 @@ public with sharing class FSC_ExcepcionesCreditoController {
 	) {
 		for (FSC_Excepcion__c excepcion : excepciones) {
 			if (excepcion.FSC_Estado__c == ESTADO_PENDIENTE && actionableTargetIds.contains(excepcion.Id)) {
+				return childSnapshot(excepcion);
+			}
+		}
+		for (FSC_Excepcion__c excepcion : excepciones) {
+			if (excepcion.FSC_Estado__c == ESTADO_OBSERVADA) {
 				return childSnapshot(excepcion);
 			}
 		}
@@ -252,8 +356,17 @@ public with sharing class FSC_ExcepcionesCreditoController {
 	private static TargetSnapshot childSnapshot(FSC_Excepcion__c excepcion) {
 		TargetSnapshot target = new TargetSnapshot();
 		target.targetId = excepcion.Id;
+		target.solicitudId = excepcion.FSC_Solicitud_Prestamo__c;
+		Map<String, Object> populated = excepcion.getPopulatedFieldsAsMap();
+		if (populated.containsKey('FSC_Solicitud_Prestamo__r') && excepcion.FSC_Solicitud_Prestamo__r != null) {
+			target.solicitudName = excepcion.FSC_Solicitud_Prestamo__r.Name;
+			target.solicitudOwnerId = excepcion.FSC_Solicitud_Prestamo__r.OwnerId;
+		}
 		target.estado = excepcion.FSC_Estado__c;
 		target.condicion = excepcion.FSC_Condicion__c;
+		target.observaciones = excepcion.FSC_Observaciones_Aprobador__c;
+		target.pasoObservacion = excepcion.FSC_Paso_Observacion__c;
+		target.motivo = excepcion.FSC_Motivo__c;
 		target.tipo = excepcion.FSC_Tipo__c;
 		target.detalle = excepcion.FSC_Detalle__c;
 		return target;
@@ -272,11 +385,51 @@ public with sharing class FSC_ExcepcionesCreditoController {
 
 	private static Boolean hasPendingException(List<FSC_Excepcion__c> excepciones) {
 		for (FSC_Excepcion__c excepcion : excepciones) {
-			if (excepcion.FSC_Estado__c == ESTADO_PENDIENTE) {
+			if (excepcion.FSC_Estado__c == ESTADO_PENDIENTE || excepcion.FSC_Estado__c == ESTADO_OBSERVADA) {
 				return true;
 			}
 		}
 		return false;
+	}
+
+	private static void notifyOwnerExceptionObserved(TargetSnapshot target, String observaciones) {
+		try {
+			if (target == null || target.solicitudId == null || target.solicitudOwnerId == null) {
+				return;
+			}
+			if (target.solicitudOwnerId.getSObjectType() != User.SObjectType || target.solicitudOwnerId == UserInfo.getUserId()) {
+				return;
+			}
+			List<User> activeOwners = [
+				SELECT Id
+				FROM User
+				WHERE Id = :target.solicitudOwnerId AND IsActive = TRUE
+				WITH SYSTEM_MODE
+				LIMIT 1
+			];
+			if (activeOwners.isEmpty()) {
+				return;
+			}
+			List<CustomNotificationType> notificationTypes = [
+				SELECT Id
+				FROM CustomNotificationType
+				WHERE DeveloperName = :NOTIFICATION_TYPE_DEVOLUCION
+				WITH SYSTEM_MODE
+				LIMIT 1
+			];
+			if (notificationTypes.isEmpty()) {
+				return;
+			}
+			String rlaLabel = String.isNotBlank(target.solicitudName) ? target.solicitudName : 'Solicitud de crédito';
+			Messaging.CustomNotification notification = new Messaging.CustomNotification();
+			notification.setNotificationTypeId(notificationTypes[0].Id);
+			notification.setTargetId(target.solicitudId);
+			notification.setTitle(('Excepción observada - ' + rlaLabel).abbreviate(250));
+			notification.setBody(('Devuelta por ' + UserInfo.getName() + '. Observación: ' + observaciones).abbreviate(750));
+			notification.send(new Set<String>{ String.valueOf(target.solicitudOwnerId) });
+		} catch (Exception ex) {
+			System.debug(LoggingLevel.WARN, 'No se pudo enviar notificación de excepción observada: ' + ex.getMessage());
+		}
 	}
 
 	private static Integer getChildCount(ResidentialLoanApplication solicitud) {

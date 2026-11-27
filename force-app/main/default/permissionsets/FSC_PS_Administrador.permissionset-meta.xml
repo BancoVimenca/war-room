@@ -4271,6 +4271,16 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>true</editable>
+        <field>FSC_Excepcion__c.FSC_Observaciones_Aprobador__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
+        <field>FSC_Excepcion__c.FSC_Paso_Observacion__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>true</editable>
         <field>FSC_Facilidad_Otra_Institucion__c.FSC_Balance__c</field>
         <readable>true</readable>
     </fieldPermissions>

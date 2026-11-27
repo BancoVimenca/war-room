@@ -397,6 +397,13 @@
 					</div>
 				</template>
 
+				<template if:true={showMensajeExcepcionObservada}>
+					<div class="banner warning">
+						<span class="icon">⚠️</span>
+						<span class="text">{mensajeExcepcionObservada}</span>
+					</div>
+				</template>
+
 				<template if:true={showRespuestaCondicionExcepcion}>
 					<div class="banner warning">
 						<span class="icon">⚠️</span>
@@ -484,9 +491,24 @@
 								onclick={openModalCondicionExcepcion}>
 							</lightning-button>
 							<lightning-button
+								variant="neutral"
+								label="Devolver con observaciones"
+								onclick={openModalObservarExcepcion}>
+							</lightning-button>
+							<lightning-button
 								variant="destructive"
 								label="Rechazar excepción"
 								onclick={openModalRechazoExcepcion}>
+							</lightning-button>
+						</div>
+					</template>
+
+					<template if:true={showSubsanarObservacionExcepcion}>
+						<div class="btnRow center">
+							<lightning-button
+								variant="brand"
+								label="Subsanar y reenviar excepción"
+								onclick={openModalSubsanarExcepcion}>
 							</lightning-button>
 						</div>
 					</template>
@@ -1059,6 +1081,99 @@
 						variant="destructive"
 						label="Rechazar excepción"
 						onclick={handleRechazarExcepcionCredito}>
+					</lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<template if:true={showModalObservarExcepcion}>
+		<section
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="titulo-observar-excepcion"
+			class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2
+						id="titulo-observar-excepcion"
+						class="slds-text-heading_medium">
+						Devolver excepción con observaciones
+					</h2>
+				</header>
+				<div class="slds-modal__content slds-p-around_medium">
+					<p class="slds-text-body_small slds-text-color_weak slds-m-bottom_small">
+						La excepción regresará al Oficial de Negocio para subsanación sin rechazar ni cerrar la solicitud de crédito.
+					</p>
+					<lightning-textarea
+						name="observacionesExcepcion"
+						label="Observaciones para el Oficial de Negocio"
+						value={observacionesExcepcionInput}
+						onchange={handleObservacionesExcepcionChange}
+						max-length="32768"
+						required>
+					</lightning-textarea>
+				</div>
+				<footer class="slds-modal__footer">
+					<lightning-button
+						variant="neutral"
+						label="Cancelar"
+						onclick={closeModalObservarExcepcion}>
+					</lightning-button>
+					<lightning-button
+						class="slds-m-left_x-small"
+						variant="brand"
+						label="Devolver con observaciones"
+						onclick={handleDevolverExcepcionConObservacion}>
+					</lightning-button>
+				</footer>
+			</div>
+		</section>
+		<div class="slds-backdrop slds-backdrop_open"></div>
+	</template>
+
+	<template if:true={showModalSubsanarExcepcion}>
+		<section
+			role="dialog"
+			tabindex="-1"
+			aria-modal="true"
+			aria-labelledby="titulo-subsanar-excepcion"
+			class="slds-modal slds-fade-in-open">
+			<div class="slds-modal__container">
+				<header class="slds-modal__header">
+					<h2
+						id="titulo-subsanar-excepcion"
+						class="slds-text-heading_medium">
+						Subsanar y reenviar excepción
+					</h2>
+				</header>
+				<div class="slds-modal__content slds-p-around_medium">
+					<div class="slds-box slds-theme_warning slds-m-bottom_medium">
+						<p class="slds-text-title_bold">Observaciones del aprobador:</p>
+						<p class="slds-m-top_xx-small">{excepcionContext.observaciones}</p>
+					</div>
+					<lightning-textarea
+						name="subsanacionExcepcion"
+						label="Descripción / Justificación actualizada de la excepción"
+						value={subsanacionExcepcionInput}
+						onchange={handleSubsanacionExcepcionChange}
+						max-length="32768"
+						required>
+					</lightning-textarea>
+				</div>
+				<footer class="slds-modal__footer">
+					<lightning-button
+						variant="neutral"
+						label="Cancelar"
+						onclick={closeModalSubsanarExcepcion}>
+					</lightning-button>
+					<lightning-button
+						class="slds-m-left_x-small"
+						variant="brand"
+						label="Subsanar y reenviar"
+						onclick={handleSubsanarYReenviarExcepcion}>
 					</lightning-button>
 				</footer>
 			</div>

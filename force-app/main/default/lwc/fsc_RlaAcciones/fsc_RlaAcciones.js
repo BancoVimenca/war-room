@@ -87,6 +87,8 @@ import aprobarExcepcionCredito from '@salesforce/apex/FSC_ExcepcionesCreditoCont
 import aprobarExcepcionConCondicion from '@salesforce/apex/FSC_ExcepcionesCreditoController.aprobarExcepcionConCondicion';
 import rechazarExcepcionCredito from '@salesforce/apex/FSC_ExcepcionesCreditoController.rechazarExcepcion';
 import responderCondicionCliente from '@salesforce/apex/FSC_ExcepcionesCreditoController.responderCondicionCliente';
+import devolverExcepcionConObservacion from '@salesforce/apex/FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion';
+import subsanarYReenviarExcepcion from '@salesforce/apex/FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion';
 import getFormalizacionGarantiasContext from '@salesforce/apex/FSC_GarantiaFormalizacionController.getContext';
 import desembolsarSinRegistrarGarantias from '@salesforce/apex/FSC_GarantiaFormalizacionController.desembolsarSinRegistrar';
 import guardarFormalizacionGarantias from '@salesforce/apex/FSC_GarantiaFormalizacionController.guardarFormalizacion';
@@ -354,12 +356,16 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 	@track showModalSolicitarExcepcionCredito = false;
 	@track showModalCondicionExcepcion = false;
 	@track showModalRechazoExcepcion = false;
+	@track showModalObservarExcepcion = false;
+	@track showModalSubsanarExcepcion = false;
 	@track opcionesExcepcion = [];
 	@track tipoExcepcionSeleccionado = '';
 	@track detalleExcepcionSeleccionado = '';
 	@track descripcionExcepcion = '';
 	@track condicionExcepcionInput = '';
 	@track motivoRechazoExcepcion = '';
+	@track observacionesExcepcionInput = '';
+	@track subsanacionExcepcionInput = '';
 	@track showModalFormalizacionGarantias = false;
 	@track garantiasFormalizacion = [];
 
@@ -912,6 +918,9 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 				limiteAlcanzado: false,
 				estado: 'No aplica',
 				condicion: '',
+				observaciones: '',
+				pasoObservacion: '',
+				motivo: '',
 				tipo: '',
 				detalle: '',
 				tienePendientes: false,
@@ -919,6 +928,7 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 				canActOnApproval: false,
 				puedeSolicitar: false,
 				puedeResponderCondicion: false,
+				puedeSubsanarObservacion: false,
 			}
 		);
 	}
@@ -944,6 +954,20 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 		const tipo = this.excepcionContext.tipo ? ` (${this.excepcionContext.tipo})` : '';
 		const aprobador = this.excepcionContext.aprobadorActual ? ` Asignada a: ${this.excepcionContext.aprobadorActual}.` : '';
 		return `Tiene una excepción de crédito${tipo} pendiente de decisión.${aprobador}`;
+	}
+
+	get showMensajeExcepcionObservada() {
+		return this.excepcionContext.estado === 'Observada';
+	}
+
+	get mensajeExcepcionObservada() {
+		const origen = this.excepcionContext.pasoObservacion ? ` (${this.excepcionContext.pasoObservacion})` : '';
+		const obs = this.excepcionContext.observaciones || 'Se requiere ampliar o aclarar la justificación.';
+		return `Excepción devuelta con observaciones${origen}: ${obs}`;
+	}
+
+	get showSubsanarObservacionExcepcion() {
+		return this.excepcionContext.puedeSubsanarObservacion === true;
 	}
 
 	get showRespuestaCondicionExcepcion() {
@@ -1922,6 +1946,9 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 			this.showEdicionDocumentosAnalisis ||
 			this.showSolicitarExcepcionCredito ||
 			this.showAccionesAprobacionExcepcion ||
+			this.showMensajeExcepcionPendiente ||
+			this.showMensajeExcepcionObservada ||
+			this.showSubsanarObservacionExcepcion ||
 			this.showRespuestaCondicionExcepcion ||
 			this.showApprovalSection ||
 			this.showAnalystValidationStage ||
@@ -1959,6 +1986,9 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 			this.showEdicionDocumentosAnalisis ||
 			this.showSolicitarExcepcionCredito ||
 			this.showAccionesAprobacionExcepcion ||
+			this.showMensajeExcepcionPendiente ||
+			this.showMensajeExcepcionObservada ||
+			this.showSubsanarObservacionExcepcion ||
 			this.showRespuestaCondicionExcepcion ||
 			this.showRecepcionDocs ||
 			this.showClienteAceptaCondicion ||
@@ -3821,6 +3851,78 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 			await this.refreshAll();
 		} catch (error) {
 			this.showToast('Error', this.getErrorMessage(error, 'No se pudo registrar la respuesta del cliente.'), 'error');
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	openModalObservarExcepcion() {
+		this.observacionesExcepcionInput = '';
+		this.showModalObservarExcepcion = true;
+	}
+
+	closeModalObservarExcepcion() {
+		this.showModalObservarExcepcion = false;
+	}
+
+	handleObservacionesExcepcionChange(event) {
+		this.observacionesExcepcionInput = event.target.value;
+	}
+
+	async handleDevolverExcepcionConObservacion() {
+		const observaciones = (this.observacionesExcepcionInput || '').trim();
+		if (!observaciones) {
+			this.showToast('Error', 'Las observaciones son requeridas para devolver la excepción.', 'error');
+			return;
+		}
+
+		this.showModalObservarExcepcion = false;
+		this.loading = true;
+		try {
+			await devolverExcepcionConObservacion({
+				excepcionId: this.excepcionContext.excepcionId,
+				observaciones,
+			});
+			this.showToast('Actualizado', 'La excepción fue devuelta con observaciones al Oficial de Negocio.', 'success');
+			await this.refreshAll();
+		} catch (error) {
+			this.showToast('Error', this.getErrorMessage(error, 'No se pudo devolver la excepción con observaciones.'), 'error');
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	openModalSubsanarExcepcion() {
+		this.subsanacionExcepcionInput = this.excepcionContext.motivo || '';
+		this.showModalSubsanarExcepcion = true;
+	}
+
+	closeModalSubsanarExcepcion() {
+		this.showModalSubsanarExcepcion = false;
+	}
+
+	handleSubsanacionExcepcionChange(event) {
+		this.subsanacionExcepcionInput = event.target.value;
+	}
+
+	async handleSubsanarYReenviarExcepcion() {
+		const nuevaDescripcion = (this.subsanacionExcepcionInput || '').trim();
+		if (!nuevaDescripcion) {
+			this.showToast('Error', 'La descripción subsanada de la excepción es obligatoria.', 'error');
+			return;
+		}
+
+		this.showModalSubsanarExcepcion = false;
+		this.loading = true;
+		try {
+			await subsanarYReenviarExcepcion({
+				excepcionId: this.excepcionContext.excepcionId,
+				nuevaDescripcion,
+			});
+			this.showToast('Excepción reenviada', 'La excepción subsanada fue enviada nuevamente a aprobación.', 'success');
+			await this.refreshAll();
+		} catch (error) {
+			this.showToast('Error', this.getErrorMessage(error, 'No se pudo subsanar y reenviar la excepción.'), 'error');
 		} finally {
 			this.loading = false;
 		}
