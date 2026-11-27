@@ -19,14 +19,28 @@ public with sharing class FSC_RLATriggerHandler {
 	private static Map<Id, String> pendingCreationNames = new Map<Id, String>();
 
 	private static Boolean isSettingRequestNumber = false;
+	@TestVisible
+	private static Boolean testAllowEnqueueBuroOnInsert = false;
 
 	public static void afterInsert(List<ResidentialLoanApplication> newRLA) {
 		if (newRLA == null || newRLA.isEmpty()) {
 			return;
 		}
 		List<ResidentialLoanApplication> recordsToUpdate = new List<ResidentialLoanApplication>();
+		Set<Id> residentialLoanApplicationIds = new Set<Id>();
 		Integer nameLength = ResidentialLoanApplication.Name.getDescribe().getLength();
 		for (ResidentialLoanApplication rla : newRLA) {
+			if (rla == null) {
+				continue;
+			}
+			if (
+				rla.FSC_Subestado__c == 'En Motor Buró' &&
+				String.isBlank(rla.FSC_Resultado_Buro__c) &&
+				rla.RecordTypeId != PYME_RECORD_TYPE_ID
+			) {
+				// PYME consulta Buró únicamente mediante FSC_APIBuroCreditoPyme.
+				residentialLoanApplicationIds.add(rla.Id);
+			}
 			if (String.isBlank(rla.Name) || String.isBlank(rla.FSC_NumeroSolicitud__c)) {
 				continue;
 			}
@@ -36,19 +50,21 @@ public with sharing class FSC_RLATriggerHandler {
 				recordsToUpdate.add(new ResidentialLoanApplication(Id = rla.Id));
 			}
 		}
-		if (recordsToUpdate.isEmpty()) {
-			return;
-		}
-		isSettingRequestNumber = true;
-		try {
-			// El autonumérico existe después del insert. El update llega sin cambios de Name
-			// al Flow de bloqueo; el before update completa únicamente estos nombres de creación.
-			update as user recordsToUpdate;
-		} finally {
-			isSettingRequestNumber = false;
-			for (ResidentialLoanApplication rla : recordsToUpdate) {
-				pendingCreationNames.remove(rla.Id);
+		if (!recordsToUpdate.isEmpty()) {
+			isSettingRequestNumber = true;
+			try {
+				// El autonumérico existe después del insert. El update llega sin cambios de Name
+				// al Flow de bloqueo; el before update completa únicamente estos nombres de creación.
+				update as user recordsToUpdate;
+			} finally {
+				isSettingRequestNumber = false;
+				for (ResidentialLoanApplication rla : recordsToUpdate) {
+					pendingCreationNames.remove(rla.Id);
+				}
 			}
+		}
+		if (!residentialLoanApplicationIds.isEmpty() && (!Test.isRunningTest() || testAllowEnqueueBuroOnInsert)) {
+			callToResidentialLoanApplication(residentialLoanApplicationIds);
 		}
 	}
 

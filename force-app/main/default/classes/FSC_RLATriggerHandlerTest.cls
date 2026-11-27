@@ -1,5 +1,161 @@
 @IsTest
 private class FSC_RLATriggerHandlerTest {
+	@TestSetup
+	static void asignarPermisosAdministrador() {
+		System.runAs(new User(Id = UserInfo.getUserId())) {
+			List<PermissionSet> permisos = [SELECT Id FROM PermissionSet WHERE Name = 'FSC_PS_Administrador' LIMIT 1];
+			if (!permisos.isEmpty()) {
+				if (
+					[
+						SELECT COUNT()
+						FROM PermissionSetAssignment
+						WHERE AssigneeId = :UserInfo.getUserId() AND PermissionSetId = :permisos[0].Id
+					] == 0
+				) {
+					insert new PermissionSetAssignment(AssigneeId = UserInfo.getUserId(), PermissionSetId = permisos[0].Id);
+				}
+			}
+		}
+	}
+
+	@IsTest
+	static void testAfterInsertEnMotorBuroAutoAdvancesWhenMotorOff() {
+		Id consumoRtId = Schema.SObjectType.ResidentialLoanApplication.getRecordTypeInfosByDeveloperName()
+			.get('FSC_Solicitud_Credito_Consumo')
+			.getRecordTypeId();
+		Account acc = new Account(Name = 'Test Account Auto Buro Consumo');
+		insert acc;
+
+		FSC_BuroConfigService.motoresApagadosEnPrueba.add('FSC_Solicitud_Credito_Consumo');
+		FSC_RLATriggerHandler.testAllowEnqueueBuroOnInsert = true;
+		ResidentialLoanApplication rla = new ResidentialLoanApplication(
+			Name = 'RLA Auto Buro Insert',
+			AccountId = acc.Id,
+			RecordTypeId = consumoRtId,
+			Status = 'En proceso',
+			FSC_Subestado__c = 'En Motor Buró',
+			FSC_Monto__c = 50000,
+			FSC_Plazo_meses__c = '24',
+			FSC_TasaInteres__c = 15.00
+		);
+
+		try {
+			Test.startTest();
+			insert rla;
+			Test.stopTest();
+		} finally {
+			FSC_RLATriggerHandler.testAllowEnqueueBuroOnInsert = false;
+			FSC_BuroConfigService.motoresApagadosEnPrueba.clear();
+		}
+
+		ResidentialLoanApplication updatedRla = [
+			SELECT Id, Name, FSC_NumeroSolicitud__c, FSC_Subestado__c, FSC_Resultado_Buro__c, FSC_Mensajes_Buro__c, FSC_Moneda__c
+			FROM ResidentialLoanApplication
+			WHERE Id = :rla.Id
+		];
+		System.assertEquals(
+			FSC_BuroConfigService.SUBESTADO_REFERIDO,
+			updatedRla.FSC_Subestado__c,
+			'La solicitud creada en En Motor Buró debe avanzar automáticamente a Recepción de documentos – Análisis sin requerir Reintentar buró'
+		);
+		System.assertEquals(
+			FSC_BuroConfigService.RESULTADO_REFERIDO,
+			updatedRla.FSC_Resultado_Buro__c,
+			'El resultado de buró debe quedar en Referido automáticamente cuando el motor está apagado'
+		);
+		System.assertEquals(
+			FSC_BuroConfigService.MENSAJE_MOTOR_APAGADO,
+			updatedRla.FSC_Mensajes_Buro__c,
+			'Debe registrar el mensaje estándar de motor de buró apagado'
+		);
+		System.assertEquals('1', updatedRla.FSC_Moneda__c, 'Consumo sin moneda debe quedar en pesos por defecto');
+		if (!String.isBlank(updatedRla.FSC_NumeroSolicitud__c)) {
+			System.assert(
+				updatedRla.Name.endsWith(' - ' + updatedRla.FSC_NumeroSolicitud__c),
+				'El nombre debe conservar el sufijo autonumérico tras la creación'
+			);
+		}
+	}
+
+	@IsTest
+	static void testAfterInsertSkipsPymeAndPreEvaluatedBuro() {
+		Id pymeRtId = Schema.SObjectType.ResidentialLoanApplication.getRecordTypeInfosByDeveloperName()
+			.get('FSC_Solicitud_Credito_PYME')
+			.getRecordTypeId();
+		Id consumoRtId = Schema.SObjectType.ResidentialLoanApplication.getRecordTypeInfosByDeveloperName()
+			.get('FSC_Solicitud_Credito_Consumo')
+			.getRecordTypeId();
+		Account acc = new Account(Name = 'Test Account Skip Pyme');
+		insert acc;
+
+		FSC_BuroConfigService.motoresApagadosEnPrueba.add('FSC_Solicitud_Credito_PYME');
+		FSC_BuroConfigService.motoresApagadosEnPrueba.add('FSC_Solicitud_Credito_Consumo');
+		FSC_RLATriggerHandler.testAllowEnqueueBuroOnInsert = true;
+
+		ResidentialLoanApplication rlaPyme = new ResidentialLoanApplication(
+			Name = 'RLA PYME En Motor Buro',
+			AccountId = acc.Id,
+			RecordTypeId = pymeRtId,
+			Status = 'En proceso',
+			FSC_Subestado__c = 'En Motor Buró'
+		);
+		ResidentialLoanApplication rlaPreEvaluated = new ResidentialLoanApplication(
+			Name = 'RLA Consumo Ya Evaluado',
+			AccountId = acc.Id,
+			RecordTypeId = consumoRtId,
+			Status = 'En proceso',
+			FSC_Subestado__c = 'En Motor Buró',
+			FSC_Resultado_Buro__c = 'Referido'
+		);
+
+		try {
+			Test.startTest();
+			insert new List<ResidentialLoanApplication>{ rlaPyme, rlaPreEvaluated };
+			System.assertEquals(
+				0,
+				Limits.getQueueableJobs(),
+				'No debe encolar FSC_LoanDecisionAPIQueueable para PYME ni para solicitudes con resultado de buró ya informado'
+			);
+			Test.stopTest();
+		} finally {
+			FSC_RLATriggerHandler.testAllowEnqueueBuroOnInsert = false;
+			FSC_BuroConfigService.motoresApagadosEnPrueba.clear();
+		}
+
+		ResidentialLoanApplication pymeAfter = [
+			SELECT Id, FSC_Subestado__c, FSC_Resultado_Buro__c
+			FROM ResidentialLoanApplication
+			WHERE Id = :rlaPyme.Id
+		];
+		System.assertEquals('En Motor Buró', pymeAfter.FSC_Subestado__c, 'PYME utiliza FSC_APIBuroCreditoPyme y no debe ser alterado por LoanDecisionAPI');
+		System.assertEquals(null, pymeAfter.FSC_Resultado_Buro__c, 'PYME no debe recibir resultado de LoanDecisionAPI en afterInsert');
+	}
+
+	@IsTest
+	static void testDuplicatePagareValidationInDatabase() {
+		Account acc = new Account(Name = 'Test Account Pagare DB');
+		insert acc;
+
+		ResidentialLoanApplication existingRla = new ResidentialLoanApplication(
+			Name = 'RLA Pagare Base',
+			AccountId = acc.Id,
+			FSC_ActoNumeroPagare__c = 'ACTO9001',
+			FSC_NumeroFolioPagare__c = 900101
+		);
+		insert existingRla;
+
+		ResidentialLoanApplication duplicateRla = new ResidentialLoanApplication(
+			Name = 'RLA Pagare Duplicado',
+			AccountId = acc.Id,
+			FSC_ActoNumeroPagare__c = 'ACTO9001',
+			FSC_NumeroFolioPagare__c = 900101
+		);
+
+		Database.SaveResult sr = Database.insert(duplicateRla, false);
+		System.assertEquals(false, sr.isSuccess(), 'No debe permitir insertar un pagaré con Acto o Folio duplicado en base de datos');
+		System.assert(!sr.getErrors().isEmpty(), 'Debe retornar errores de validación de unicidad de pagaré');
+	}
+
 	@IsTest
 	static void testRecalculateInstallmentAmountFrench() {
 		Account acc = new Account(Name = 'Test Account Cuota');
