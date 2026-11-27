@@ -51,7 +51,7 @@ def run_git_command(cmd):
     result = subprocess.run(cmd, shell=True, capture_output=True, text=True)
     if result.returncode != 0:
         return []
-    return [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
+    return [line.rstrip('\r\n') for line in result.stdout.split('\n') if line.strip()]
 
 def get_changed_files(sol_id, commits_count=None, base_branch=None):
     files = set()
@@ -74,11 +74,20 @@ def get_changed_files(sol_id, commits_count=None, base_branch=None):
         files.update(recent_files)
         
     # 4. Incluir cambios locales en stage o sin comitear
-    uncommitted = run_git_command('git status --porcelain')
+    uncommitted = run_git_command('git -c core.quotePath=false status --porcelain')
     for line in uncommitted:
-        parts = line.split()
-        if len(parts) >= 2:
-            files.add(parts[-1])
+        if len(line) > 3:
+            path = line[3:].strip()
+            if ' -> ' in path:
+                path = path.split(' -> ')[-1].strip()
+            if path.startswith('"') and path.endswith('"'):
+                path = path[1:-1]
+            if os.path.isdir(path):
+                for root_dir, _, fnames in os.walk(path):
+                    for fname in fnames:
+                        files.add(os.path.join(root_dir, fname))
+            else:
+                files.add(path)
             
     return sorted(list(files))
 
@@ -145,6 +154,9 @@ def extract_metadata_members(changed_files):
             elif len(parts) >= 2 and parts[1].endswith('.object-meta.xml'):
                 obj_name = parts[1].replace('.object-meta.xml', '')
                 metadata_map['CustomObject'].add(obj_name)
+        elif folder == 'layouts':
+            if filename.endswith('.layout-meta.xml'):
+                metadata_map['Layout'].add(filename.replace('.layout-meta.xml', ''))
         elif folder in FOLDER_TO_METADATA:
             meta_type = FOLDER_TO_METADATA[folder]
             member = filename.split('.')[0]

@@ -597,6 +597,14 @@
         <enabled>true</enabled>
     </classAccesses>
     <classAccesses>
+        <apexClass>FSC_LoanDraftPersistenceService</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
+        <apexClass>FSC_LoanDraftPersistenceServiceTest</apexClass>
+        <enabled>true</enabled>
+    </classAccesses>
+    <classAccesses>
         <apexClass>FSC_LoanFacilityController</apexClass>
         <enabled>true</enabled>
     </classAccesses>
@@ -6040,6 +6048,11 @@
     </fieldPermissions>
     <fieldPermissions>
         <editable>false</editable>
+        <field>LoanApplicationAsset.CashOrMarketValue</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
         <field>LoanApplicationAsset.FSC_Ano_Vehiculo_Contrato__c</field>
         <readable>true</readable>
     </fieldPermissions>
@@ -6056,6 +6069,11 @@
     <fieldPermissions>
         <editable>false</editable>
         <field>LoanApplicationAsset.FSC_Descripcion_Contrato__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>LoanApplicationAsset.FSC_Descripcion_de_la_Garantia__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -6081,6 +6099,11 @@
     <fieldPermissions>
         <editable>false</editable>
         <field>LoanApplicationAsset.FSC_Modelo_Vehiculo_Contrato__c</field>
+        <readable>true</readable>
+    </fieldPermissions>
+    <fieldPermissions>
+        <editable>false</editable>
+        <field>LoanApplicationAsset.FSC_MonedaGarantia__c</field>
         <readable>true</readable>
     </fieldPermissions>
     <fieldPermissions>
@@ -8388,32 +8411,8 @@
         <field>omnistudio__VlocityErrorLogEntry__c.omnistudio__VlocityInteractionToken__c</field>
         <readable>true</readable>
     </fieldPermissions>
-    <fieldPermissions>
-        <editable>false</editable>
-        <field>LoanApplicationAsset.CashOrMarketValue</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>false</editable>
-        <field>LoanApplicationAsset.FSC_Descripcion_de_la_Garantia__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
-    <fieldPermissions>
-        <editable>false</editable>
-        <field>LoanApplicationAsset.FSC_MonedaGarantia__c</field>
-        <readable>true</readable>
-    </fieldPermissions>
     <hasActivationRequired>false</hasActivationRequired>
     <label>FSC - Permisos rol Comité de crédito</label>
-    <objectPermissions>
-        <allowCreate>false</allowCreate>
-        <allowDelete>false</allowDelete>
-        <allowEdit>false</allowEdit>
-        <allowRead>true</allowRead>
-        <modifyAllRecords>false</modifyAllRecords>
-        <object>LoanApplicationAsset</object>
-        <viewAllRecords>false</viewAllRecords>
-    </objectPermissions>
     <objectPermissions>
         <allowCreate>false</allowCreate>
         <allowDelete>false</allowDelete>
@@ -8646,6 +8645,15 @@
         <allowRead>true</allowRead>
         <modifyAllRecords>false</modifyAllRecords>
         <object>LoanApplicant</object>
+        <viewAllRecords>false</viewAllRecords>
+    </objectPermissions>
+    <objectPermissions>
+        <allowCreate>false</allowCreate>
+        <allowDelete>false</allowDelete>
+        <allowEdit>false</allowEdit>
+        <allowRead>true</allowRead>
+        <modifyAllRecords>false</modifyAllRecords>
+        <object>LoanApplicationAsset</object>
         <viewAllRecords>false</viewAllRecords>
     </objectPermissions>
     <objectPermissions>

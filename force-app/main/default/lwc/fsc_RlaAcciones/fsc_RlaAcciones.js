@@ -76,6 +76,9 @@ import reintentarDocumentosLegales from '@salesforce/apex/FSC_RlaAccionesControl
 import generarActoGarantiaSolidaria from '@salesforce/apex/FSC_GenerarActoGarantiaSolidaria.generar';
 import marcarDocumentosFirmadosFisicamente from '@salesforce/apex/FSC_RlaAccionesController.marcarDocumentosFirmadosFisicamente';
 import getFirmaValidationState from '@salesforce/apex/FSC_RlaAccionesController.getFirmaValidationState';
+import registrarFirmaPresencial from '@salesforce/apex/FSC_RlaAccionesController.registrarFirmaPresencial';
+import reenviarPlanillaAFirmar from '@salesforce/apex/FSC_RlaAccionesController.reenviarPlanillaAFirmar';
+import tienePlanillaPendienteDeFirma from '@salesforce/apex/FSC_RlaAccionesController.tienePlanillaPendienteDeFirma';
 import validarClasificacionMIPYMES from '@salesforce/apex/FSC_RlaAccionesController.validarClasificacionMIPYMES';
 import getContextoExcepcion from '@salesforce/apex/FSC_ExcepcionesCreditoController.getContextoExcepcion';
 import getOpcionesExcepcion from '@salesforce/apex/FSC_ExcepcionesCreditoController.getOpcionesExcepcion';
@@ -278,6 +281,7 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 	wiredApprovalContextResult;
 	wiredPagaresContextResult;
 	wiredDocumentacionContratosResult;
+	planillaPendienteFirma = false;
 	refreshHandlerId;
 	showModalPedidoDocumentacion = false;
 	pedidoDocumentacionInput = '';
@@ -343,6 +347,10 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 	@track erroresConfiguracionContrato = [];
 	@track erroresConfiguracionActo = [];
 	@track showModalFirmaFisica = false;
+	@track showModalFirmaPresencial = false;
+	@track showModalReenvioFirma = false;
+	archivoFirmaPresencial;
+	formatosFirmaPresencial = ['.pdf'];
 	@track showModalSolicitarExcepcionCredito = false;
 	@track showModalCondicionExcepcion = false;
 	@track showModalRechazoExcepcion = false;
@@ -451,6 +459,9 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 		this.showModalDatosPagare = false;
 		this.showModalDocumentoLegal = false;
 		this.showModalFirmaFisica = false;
+		this.showModalFirmaPresencial = false;
+		this.showModalReenvioFirma = false;
+		this.archivoFirmaPresencial = undefined;
 		this.showModalSolicitarExcepcionCredito = false;
 		this.showModalCondicionExcepcion = false;
 		this.showModalRechazoExcepcion = false;
@@ -464,6 +475,20 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 		if (result?.data) {
 			this.rlaRecordTypeId = getFieldValue(result.data, RECORD_TYPE_ID_FIELD);
 			this.rlaOwnerId = getFieldValue(result.data, OWNER_ID_FIELD);
+			this.cargarPlanillaPendienteFirma();
+		}
+	}
+
+	// Consulta imperativa: el envío a firma es asíncrono y un resultado cacheado ocultaría el botón.
+	async cargarPlanillaPendienteFirma() {
+		if (!this.showConsultarEstadoFirma) {
+			this.planillaPendienteFirma = false;
+			return;
+		}
+		try {
+			this.planillaPendienteFirma = (await tienePlanillaPendienteDeFirma({ residentialLoanApplicationId: this.recordId })) === true;
+		} catch {
+			this.planillaPendienteFirma = false;
 		}
 	}
 
@@ -912,18 +937,12 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 	}
 
 	get showMensajeExcepcionPendiente() {
-		return (
-			this.excepcionContext.hasActiveApproval === true &&
-			this.excepcionContext.estado === 'Pendiente' &&
-			!this.excepcionContext.condicion
-		);
+		return this.excepcionContext.hasActiveApproval === true && this.excepcionContext.estado === 'Pendiente' && !this.excepcionContext.condicion;
 	}
 
 	get mensajeExcepcionPendiente() {
 		const tipo = this.excepcionContext.tipo ? ` (${this.excepcionContext.tipo})` : '';
-		const aprobador = this.excepcionContext.aprobadorActual
-			? ` Asignada a: ${this.excepcionContext.aprobadorActual}.`
-			: '';
+		const aprobador = this.excepcionContext.aprobadorActual ? ` Asignada a: ${this.excepcionContext.aprobadorActual}.` : '';
 		return `Tiene una excepción de crédito${tipo} pendiente de decisión.${aprobador}`;
 	}
 
@@ -1154,6 +1173,18 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 
 	get showConsultarEstadoFirma() {
 		return this.allowOficialOrAdmins && this.substatus === 'Gestionar firmas' && this.firmaCompletada === false && this.enviadoAFirmar === true;
+	}
+
+	get showFirmaPlanillaPresencial() {
+		return this.showConsultarEstadoFirma && this.planillaPendienteFirma === true;
+	}
+
+	get showReenviarPlanillaAFirmar() {
+		return this.showConsultarEstadoFirma && this.planillaPendienteFirma === true;
+	}
+
+	get disableConfirmarFirmaPresencial() {
+		return this.loading || !this.archivoFirmaPresencial;
 	}
 
 	get showDocDesembolso() {
@@ -2362,6 +2393,79 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 		}
 	}
 
+	openModalReenvioFirma() {
+		if (!this.validateOwnerOrAdminAction()) return;
+		this.showModalReenvioFirma = true;
+	}
+
+	closeModalReenvioFirma() {
+		if (this.loading) return;
+		this.showModalReenvioFirma = false;
+	}
+
+	async handleConfirmarReenvioFirma() {
+		if (this.loading) return;
+
+		this.loading = true;
+		try {
+			await reenviarPlanillaAFirmar({ residentialLoanApplicationId: this.recordId });
+			this.showModalReenvioFirma = false;
+			this.planillaPendienteFirma = false;
+			this.showToast(
+				'Reenvío iniciado',
+				'Se está cancelando el envío anterior y enviando la Planilla nuevamente. Refresque la página en 1 minuto...',
+				'success'
+			);
+			await this.refreshAll();
+		} catch (e) {
+			this.showToast('Error', this.getErrorMessage(e, 'No se pudo reenviar la Planilla a firmar.'), 'error');
+		} finally {
+			this.loading = false;
+		}
+	}
+
+	openModalFirmaPresencial() {
+		if (!this.validateOwnerOrAdminAction()) return;
+		this.archivoFirmaPresencial = undefined;
+		this.showModalFirmaPresencial = true;
+	}
+
+	closeModalFirmaPresencial() {
+		if (this.loading) return;
+		this.showModalFirmaPresencial = false;
+		this.archivoFirmaPresencial = undefined;
+	}
+
+	handleArchivoFirmaPresencial(event) {
+		const archivo = event.detail.files?.[0];
+		this.archivoFirmaPresencial = archivo ? { id: archivo.documentId, nombre: archivo.name } : undefined;
+	}
+
+	async handleConfirmarFirmaPresencial() {
+		if (this.disableConfirmarFirmaPresencial) return;
+
+		this.loading = true;
+		try {
+			await registrarFirmaPresencial({
+				residentialLoanApplicationId: this.recordId,
+				contentDocumentId: this.archivoFirmaPresencial.id,
+			});
+			this.showModalFirmaPresencial = false;
+			this.archivoFirmaPresencial = undefined;
+			this.planillaPendienteFirma = false;
+			this.showToast(
+				'Planilla firmada presencialmente',
+				'La Planilla se marcó como firmada de forma presencial. Use "Validar firmas" para continuar.',
+				'success'
+			);
+			await this.refreshAll();
+		} catch (e) {
+			this.showToast('Error', this.getErrorMessage(e, 'No se pudo registrar la firma presencial.'), 'error');
+		} finally {
+			this.loading = false;
+		}
+	}
+
 	openModalFormalizacionGarantias() {
 		this.showModalFormalizacionGarantias = true;
 	}
@@ -3326,6 +3430,8 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 			omniSubType +
 			'&c__ContextId=' +
 			this.accountId +
+			'&c__rlaId=' +
+			this.recordId +
 			'&c__AvanzarPrimerStep=true';
 
 		this[NavigationMixin.Navigate]({
@@ -3744,6 +3850,7 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 			promises.push(refreshApex(this.wiredFormalizacionResult));
 		}
 		await Promise.all(promises);
+		await this.cargarPlanillaPendienteFirma();
 		await this.loadRevisionDocumentos();
 	}
 

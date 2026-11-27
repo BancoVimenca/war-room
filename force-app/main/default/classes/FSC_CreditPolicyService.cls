@@ -567,6 +567,8 @@ public with sharing class FSC_CreditPolicyService {
 			'RecordTypeId',
 			'AccountId',
 			'RecordType.DeveloperName',
+			'Status',
+			'FSC_Subestado__c',
 			'FSC_Monto__c',
 			'FSC_Plazo_meses__c',
 			'FSC_PlazoMesesAprobado__c',

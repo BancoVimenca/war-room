@@ -1,5 +1,6 @@
 import { LightningElement, track, wire, api } from 'lwc';
 import { ShowToastEvent } from 'lightning/platformShowToastEvent';
+import { NavigationMixin } from 'lightning/navigation';
 import { getObjectInfo, getPicklistValues } from 'lightning/uiObjectInfoApi';
 import { OmniscriptBaseMixin } from 'omnistudio/omniscriptBaseMixin';
 import LOANAPPLICANT_OBJECT from '@salesforce/schema/LoanApplicant';
@@ -27,6 +28,10 @@ import updateDebtorAccount from '@salesforce/apex/FSC_LoanApplicantController.up
 import getUsdToDopRate from '@salesforce/apex/FSC_LoanApplicantController.getUsdToDopRate';
 import calculateMonthlyIncomeDop from '@salesforce/apex/FSC_LoanApplicantController.calculateMonthlyIncomeDop';
 import obtenerLimiteFacilidadesOtrasInstituciones from '@salesforce/apex/FSC_LoanApplicantController.obtenerLimiteFacilidadesOtrasInstituciones';
+import getOpenApplicationsForAccount from '@salesforce/apex/FSC_LoanDraftPersistenceService.getOpenApplicationsForAccount';
+import discardDraftApplication from '@salesforce/apex/FSC_LoanDraftPersistenceService.discardDraftApplication';
+import saveStep1Draft from '@salesforce/apex/FSC_LoanDraftPersistenceService.saveStep1Draft';
+import getDraftSnapshot from '@salesforce/apex/FSC_LoanDraftPersistenceService.getDraftSnapshot';
 const INVALID_EMAIL_MESSAGE = 'Ingrese una direccion de correo valida, por ejemplo usuario@dominio.com.';
 const INVALID_REFERENCE_EMAIL_MESSAGE = 'Ingrese un correo valido sin espacios ni caracteres especiales no permitidos.';
 const DUPLICATE_REFERENCE_IDENTIFICATION_MESSAGE = 'Ya existe una referencia con el mismo tipo y numero de identificacion.';
@@ -50,8 +55,15 @@ function excedeLimiteFacilidadesOtrasInstituciones(cantidadRegistros, limiteConf
 	return Number(cantidadRegistros) > normalizarLimiteFacilidadesOtrasInstituciones(limiteConfigurado);
 }
 
-export default class FscLoanApplicantManager extends OmniscriptBaseMixin(LightningElement) {
+export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptBaseMixin(LightningElement)) {
 	@track applicants = [];
+	@track openApplications = [];
+	@track continuityResolved = false;
+	@track isContinuityActionPending = false;
+	@track forceNewDraft = false;
+	@track activeDraftNumber = '';
+	continuityLoadedKey = '';
+	boundBeforeUnloadHandler = null;
 
 	_tipoCredito = '';
 	@api recordId = '';
@@ -72,6 +84,10 @@ export default class FscLoanApplicantManager extends OmniscriptBaseMixin(Lightni
 	@api
 	set value(val) {
 		const incomingApplicants = this.normalizeApplicants(this.extractApplicants(val));
+		if (incomingApplicants.length === 0 && this.applicants.length > 0) {
+			this.notifyApplicantsChange();
+			return;
+		}
 		const isStaleValue = this.isStaleApplicantsValue(incomingApplicants);
 		this.debugTrace('value-set', { incoming: incomingApplicants.length, current: this.applicants.length, isStaleValue });
 		if (isStaleValue) {
@@ -763,8 +779,23 @@ export default class FscLoanApplicantManager extends OmniscriptBaseMixin(Lightni
 	}
 
 	connectedCallback() {
+		this.boundBeforeUnloadHandler = (event) => {
+			if (this.showModal) {
+				event.preventDefault();
+				event.returnValue = '';
+			}
+		};
+		window.addEventListener('beforeunload', this.boundBeforeUnloadHandler);
 		this.hydrateApplicantsFromOmni();
 		this.ensurePrimaryAccountApplicant();
+		this.initializeContinuityAndDraftState();
+	}
+
+	disconnectedCallback() {
+		if (this.boundBeforeUnloadHandler) {
+			window.removeEventListener('beforeunload', this.boundBeforeUnloadHandler);
+			this.boundBeforeUnloadHandler = null;
+		}
 	}
 
 	renderedCallback() {
@@ -772,6 +803,319 @@ export default class FscLoanApplicantManager extends OmniscriptBaseMixin(Lightni
 			super.renderedCallback();
 		}
 		this.ensurePrimaryAccountApplicant();
+		this.initializeContinuityAndDraftState();
+	}
+
+	get showContinuitySelector() {
+		return !this.continuityResolved && this.openApplications.length > 0;
+	}
+
+	get activeDraftBannerLabel() {
+		if (!this.activeDraftNumber && !this.getEffectiveDraftRlaId()) {
+			return '';
+		}
+		const code = this.activeDraftNumber || 'en curso';
+		return `Avance guardado automáticamente en borrador (${code}). Sus datos están respaldados ante cambios de pestaña o recarga.`;
+	}
+
+	get continuityOptions() {
+		return this.openApplications.map((app) => {
+			const formattedAmount =
+				app.monto != null
+					? `${app.monedaSimbolo || 'RD$'} ${new Intl.NumberFormat('es-DO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(app.monto)}`
+					: 'Monto pendiente';
+			const plazoText = app.plazoMeses ? `${app.plazoMeses} meses` : 'Plazo pendiente';
+			const modifiedText = app.lastModifiedDate
+				? new Intl.DateTimeFormat('es-DO', { dateStyle: 'short', timeStyle: 'short' }).format(new Date(app.lastModifiedDate))
+				: '';
+			return {
+				...app,
+				statusLabel: app.isDraft ? 'Borrador en captura' : `En proceso · ${app.subestado || ''}`,
+				badgeClass: app.isDraft ? 'slds-badge slds-theme_warning' : 'slds-badge slds-theme_info',
+				summaryLine: `${formattedAmount} · ${plazoText}${modifiedText ? ` · Actualizado: ${modifiedText}` : ''}`,
+			};
+		});
+	}
+
+	resolveEffectiveLoanType() {
+		return (
+			this.tipoCredito ||
+			this.omniScriptHeaderDef?.subType ||
+			this.omniJsonData?.sSubType ||
+			this.findFirstValue(this.omniJsonData, ['tipoCredito', 'subType', 'sSubType']) ||
+			''
+		);
+	}
+
+	resolveAccountIdOnly() {
+		const candidates = [
+			this.accountId,
+			this.contextId,
+			this.recordId,
+			this.omniJsonData?.ContextId,
+			this.omniJsonData?.AccountId,
+			this.omniJsonData?.accountId,
+			this.getAccountApplicantContextId(),
+		];
+		return candidates.find((val) => String(val || '').startsWith('001')) || '';
+	}
+
+	getEffectiveDraftRlaId() {
+		const candidates = [
+			this.residentialLoanApplicationId,
+			this.omniJsonData?.rlaId,
+			this.omniJsonData?.c__rlaId,
+		];
+		return candidates.find((val) => String(val || '').startsWith('0cd')) || '';
+	}
+
+	buildSessionDraftKey(accountId, loanType) {
+		return `fsc_sol0390_draft_${accountId || 'anon'}_${this.normalizeApplicantType(loanType || 'credito')}`;
+	}
+
+	writeSessionDraftCache(payload) {
+		try {
+			const key = this.buildSessionDraftKey(this.resolveAccountIdOnly(), this.resolveEffectiveLoanType());
+			window.sessionStorage?.setItem(key, JSON.stringify({ ...payload, updatedAt: Date.now() }));
+		} catch (e) {
+			// sessionStorage opcional
+		}
+	}
+
+	clearSessionDraftCache() {
+		try {
+			const key = this.buildSessionDraftKey(this.resolveAccountIdOnly(), this.resolveEffectiveLoanType());
+			window.sessionStorage?.removeItem(key);
+		} catch (e) {
+			// sessionStorage opcional
+		}
+	}
+
+	initializeContinuityAndDraftState() {
+		const accountId = this.resolveAccountIdOnly();
+		const loanType = this.resolveEffectiveLoanType();
+		const boundRlaId = this.getEffectiveDraftRlaId();
+
+		if (boundRlaId) {
+			if (this.continuityLoadedKey !== `rla:${boundRlaId}`) {
+				this.continuityLoadedKey = `rla:${boundRlaId}`;
+				this.continuityResolved = true;
+				this.hydrateExistingDraftById(boundRlaId, accountId, loanType);
+			}
+			return;
+		}
+
+		if (this.omniJsonData?.forceNewDraft === true) {
+			this.forceNewDraft = true;
+			this.continuityResolved = true;
+			return;
+		}
+
+		if (!accountId || !loanType) {
+			return;
+		}
+
+		const loadKey = `${accountId}:${this.normalizeApplicantType(loanType)}`;
+		if (this.continuityLoadedKey === loadKey) {
+			return;
+		}
+		this.continuityLoadedKey = loadKey;
+
+		getOpenApplicationsForAccount({ accountId, loanType })
+			.then((rows) => {
+				const list = Array.isArray(rows) ? rows : [];
+				if (list.length > 0) {
+					this.openApplications = list;
+					this.continuityResolved = false;
+				} else {
+					this.openApplications = [];
+					this.continuityResolved = true;
+				}
+			})
+			.catch((err) => {
+				console.error('Error checking open credit applications:', err);
+				this.continuityResolved = true;
+			});
+	}
+
+	async hydrateExistingDraftById(rlaId, accountId, loanType) {
+		this.isContinuityActionPending = true;
+		try {
+			const snapshot = await getDraftSnapshot({
+				rlaId,
+				accountId: accountId || null,
+				loanType: loanType || '',
+			});
+			if (snapshot?.found) {
+				this.applyHydratedSnapshot(snapshot);
+			}
+		} catch (error) {
+			console.error('Error hydrating draft snapshot:', error);
+		} finally {
+			this.isContinuityActionPending = false;
+		}
+	}
+
+	applyHydratedSnapshot(snapshot) {
+		if (!snapshot?.rlaId) {
+			return;
+		}
+		this.residentialLoanApplicationId = snapshot.rlaId;
+		this.activeDraftNumber = snapshot.numeroSolicitud || snapshot.name || '';
+		this.forceNewDraft = false;
+		this.continuityResolved = true;
+
+		if (Array.isArray(snapshot.applicants) && snapshot.applicants.length > 0) {
+			const hydratedApplicants = this.normalizeApplicants(snapshot.applicants);
+			const currentDebtor = this.applicants.find((a) => this.isDeudorApplicant(a));
+			this.applicants = hydratedApplicants.map((row) => {
+				if (this.isDeudorApplicant(row) && currentDebtor) {
+					return this.mergeMissingApplicantFields(row, currentDebtor);
+				}
+				return row;
+			});
+			this.notifyApplicantsChange();
+		}
+
+		const rootUpdate = {
+			rlaId: snapshot.rlaId,
+			forceNewDraft: false,
+		};
+		if (snapshot.datosGeneralesSolicitud && Object.keys(snapshot.datosGeneralesSolicitud).length > 0) {
+			rootUpdate.DatosGeneralesSolicitud = {
+				...(this.omniJsonData?.DatosGeneralesSolicitud || {}),
+				...snapshot.datosGeneralesSolicitud,
+			};
+		}
+		if (typeof this.omniApplyCallResp === 'function') {
+			this.omniApplyCallResp(rootUpdate);
+		}
+		this.writeSessionDraftCache({
+			rlaId: snapshot.rlaId,
+			numeroSolicitud: this.activeDraftNumber,
+			datosGeneralesSolicitud: snapshot.datosGeneralesSolicitud,
+		});
+	}
+
+	async handleContinueExistingDraft(event) {
+		const rlaId = event.currentTarget?.dataset?.rlaId;
+		if (!rlaId) {
+			return;
+		}
+		await this.hydrateExistingDraftById(rlaId, this.resolveAccountIdOnly(), this.resolveEffectiveLoanType());
+		this.dispatchEvent(
+			new ShowToastEvent({
+				title: 'Borrador recuperado',
+				message: `Se restauraron los datos guardados de la solicitud ${this.activeDraftNumber || ''}.`,
+				variant: 'success',
+			})
+		);
+	}
+
+	async handleDiscardExistingDraft(event) {
+		const rlaId = event.currentTarget?.dataset?.rlaId;
+		if (!rlaId) {
+			return;
+		}
+		this.isContinuityActionPending = true;
+		try {
+			await discardDraftApplication({ rlaId });
+			this.clearSessionDraftCache();
+			this.openApplications = this.openApplications.filter((item) => item.id !== rlaId);
+			if (this.openApplications.length === 0) {
+				this.continuityResolved = true;
+			}
+			this.dispatchEvent(
+				new ShowToastEvent({
+					title: 'Borrador descartado',
+					message: 'El borrador anterior fue cerrado y puede iniciar una solicitud limpia.',
+					variant: 'success',
+				})
+			);
+		} catch (error) {
+			this.dispatchEvent(
+				new ShowToastEvent({
+					title: 'No se pudo descartar el borrador',
+					message: error?.body?.message || error?.message || 'Intente nuevamente.',
+					variant: 'error',
+				})
+			);
+		} finally {
+			this.isContinuityActionPending = false;
+		}
+	}
+
+	handleStartIndependentApplication() {
+		this.forceNewDraft = true;
+		this.continuityResolved = true;
+		this.residentialLoanApplicationId = '';
+		this.activeDraftNumber = '';
+		this.clearSessionDraftCache();
+		if (typeof this.omniApplyCallResp === 'function') {
+			this.omniApplyCallResp({ rlaId: null, forceNewDraft: true });
+		}
+	}
+
+	handleOpenInProcessApplication(event) {
+		const rlaId = event.currentTarget?.dataset?.rlaId;
+		if (!rlaId) {
+			return;
+		}
+		this[NavigationMixin.Navigate]({
+			type: 'standard__recordPage',
+			attributes: {
+				recordId: rlaId,
+				objectApiName: 'ResidentialLoanApplication',
+				actionName: 'view',
+			},
+		});
+	}
+
+	async persistStep1DraftToServer() {
+		const accountId = this.resolveAccountIdOnly();
+		const loanType = this.resolveEffectiveLoanType();
+		if (!accountId || !loanType || this.applicants.length === 0) {
+			return;
+		}
+		try {
+			const existingRlaId = this.forceNewDraft && !this.residentialLoanApplicationId ? null : this.getEffectiveDraftRlaId() || null;
+			const response = await saveStep1Draft({
+				accountId,
+				rlaId: existingRlaId,
+				loanType,
+				applicantsJson: JSON.stringify(this.applicants),
+			});
+			if (response?.rlaId) {
+				this.residentialLoanApplicationId = response.rlaId;
+				this.activeDraftNumber = response.numeroSolicitud || this.activeDraftNumber;
+				this.forceNewDraft = false;
+				this.continuityResolved = true;
+				if (Array.isArray(response.applicants) && response.applicants.length > 0) {
+					const idByDoc = new Map();
+					response.applicants.forEach((saved) => {
+						const key = `${saved.FSC_TipoIdentificacion__c || ''}:${saved.FSC_NumIdentificacion__c || ''}`;
+						if (saved.Id) {
+							idByDoc.set(key, saved.Id);
+						}
+					});
+					this.applicants = this.applicants.map((localRow) => {
+						const key = `${localRow.FSC_TipoIdentificacion__c || ''}:${localRow.FSC_NumIdentificacion__c || ''}`;
+						const matchedId = idByDoc.get(key);
+						return matchedId ? { ...localRow, Id: matchedId } : localRow;
+					});
+					this.notifyApplicantsChange();
+				}
+				if (typeof this.omniApplyCallResp === 'function') {
+					this.omniApplyCallResp({ rlaId: response.rlaId, forceNewDraft: false });
+				}
+				this.writeSessionDraftCache({
+					rlaId: response.rlaId,
+					numeroSolicitud: this.activeDraftNumber,
+				});
+			}
+		} catch (error) {
+			console.error('Error persisting Step 1 draft:', error);
+		}
 	}
 
 	@api
@@ -781,7 +1125,11 @@ export default class FscLoanApplicantManager extends OmniscriptBaseMixin(Lightni
 
 	@api
 	reportValidity() {
-		return this.updateOmniValidity(true);
+		const valid = this.updateOmniValidity(true);
+		if (valid && !this.getEffectiveDraftRlaId()) {
+			this.persistStep1DraftToServer();
+		}
+		return valid;
 	}
 
 	updateOmniValidity(reportErrors) {
@@ -2832,6 +3180,7 @@ export default class FscLoanApplicantManager extends OmniscriptBaseMixin(Lightni
 		this.notifyApplicantsChange();
 		this.isEdit = false;
 		this.closeModal();
+		await this.persistStep1DraftToServer();
 	}
 
 	handleRowAction(event) {
@@ -2864,6 +3213,7 @@ export default class FscLoanApplicantManager extends OmniscriptBaseMixin(Lightni
 			}
 			this.applicants = this.applicants.filter((applicant) => !this.isSameApplicant(applicant, row));
 			this.notifyApplicantsChange();
+			this.persistStep1DraftToServer();
 		}
 	}
 }

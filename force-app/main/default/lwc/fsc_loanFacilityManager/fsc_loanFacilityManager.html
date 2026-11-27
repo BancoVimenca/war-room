@@ -751,6 +751,7 @@
 								onkeydown={handleNumericKeyDown}
 								oninput={handleNumericInput}
 								onpaste={handleNumericPaste}
+								onblur={handlePolicyFieldBlur}
 								onchange={handleValueChange}>
 							</lightning-input>
 						</div>
@@ -782,6 +783,7 @@
 									onkeydown={handleNumericKeyDown}
 									oninput={handlePlazoMesesInput}
 									onpaste={handlePlazoMesesPaste}
+									onblur={handlePolicyFieldBlur}
 									onchange={handleValueChange}>
 								</lightning-input>
 								<template if:false={loanTermValidationMessage}>
