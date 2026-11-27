@@ -479,7 +479,7 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 	}
 
 	get numIdentificacionPattern() {
-		return this.isCedulaSelected ? '[0-9-]{1,11}' : null;
+		return this.isCedulaSelected ? '[0-9\\-]{1,11}' : null;
 	}
 
 	get isReferenciaCedulaSelected() {
@@ -524,7 +524,7 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 		}
 
 		if (this.isReferenciaCedulaSelected) {
-			return '[0-9-]{1,11}';
+			return '[0-9\\-]{1,11}';
 		}
 
 		return this.isReferenciaPasaporteSelected ? '^[A-Z]{3}[0-9]{6}$' : null;
@@ -869,14 +869,25 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 		return candidates.find((val) => String(val || '').startsWith('0cd')) || '';
 	}
 
+	canonicalLoanTypeKey(loanType) {
+		const raw = this.normalizeApplicantType(loanType || '');
+		if (raw.includes('hipotecario')) return 'hipotecario';
+		if (raw.includes('vehicul')) return 'vehiculo';
+		if (raw.includes('pyme') || raw.includes('comercial')) return 'pyme';
+		if (raw.includes('consumo')) return 'consumo';
+		return raw || 'credito';
+	}
+
 	buildSessionDraftKey(accountId, loanType) {
-		return `fsc_sol0390_draft_${accountId || 'anon'}_${this.normalizeApplicantType(loanType || 'credito')}`;
+		return `fsc_sol0390_draft_${accountId || 'anon'}_${this.canonicalLoanTypeKey(loanType)}`;
 	}
 
 	writeSessionDraftCache(payload) {
 		try {
 			const key = this.buildSessionDraftKey(this.resolveAccountIdOnly(), this.resolveEffectiveLoanType());
-			window.sessionStorage?.setItem(key, JSON.stringify({ ...payload, updatedAt: Date.now() }));
+			const existingRaw = window.sessionStorage?.getItem(key);
+			const existing = existingRaw ? JSON.parse(existingRaw) : {};
+			window.sessionStorage?.setItem(key, JSON.stringify({ ...existing, ...payload, updatedAt: Date.now() }));
 		} catch (e) {
 			// sessionStorage opcional
 		}
@@ -889,6 +900,23 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 		} catch (e) {
 			// sessionStorage opcional
 		}
+	}
+
+	stripDraftRecordIdsFromApplicants(rows) {
+		if (!Array.isArray(rows)) {
+			return [];
+		}
+		return rows.map((applicant) => {
+			const clean = { ...applicant };
+			delete clean.Id;
+			if (Array.isArray(clean.FSC_Referencias__c)) {
+				clean.FSC_Referencias__c = clean.FSC_Referencias__c.map(({ Id, ...rest }) => rest);
+			}
+			if (Array.isArray(clean.FSC_Facilidad_Otra_Institucion__c)) {
+				clean.FSC_Facilidad_Otra_Institucion__c = clean.FSC_Facilidad_Otra_Institucion__c.map(({ Id, ...rest }) => rest);
+			}
+			return clean;
+		});
 	}
 
 	initializeContinuityAndDraftState() {
@@ -915,7 +943,7 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 			return;
 		}
 
-		const loadKey = `${accountId}:${this.normalizeApplicantType(loanType)}`;
+		const loadKey = `${accountId}:${this.canonicalLoanTypeKey(loanType)}`;
 		if (this.continuityLoadedKey === loadKey) {
 			return;
 		}
@@ -992,8 +1020,11 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 		}
 		this.writeSessionDraftCache({
 			rlaId: snapshot.rlaId,
+			forceNewDraft: false,
 			numeroSolicitud: this.activeDraftNumber,
-			datosGeneralesSolicitud: snapshot.datosGeneralesSolicitud,
+			facility: snapshot.facility || null,
+			datosGeneralesSolicitud: snapshot.datosGeneralesSolicitud || null,
+			applicants: this.applicants,
 		});
 	}
 
@@ -1050,7 +1081,18 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 		this.continuityResolved = true;
 		this.residentialLoanApplicationId = '';
 		this.activeDraftNumber = '';
+		if (this.applicants.length > 0) {
+			this.applicants = this.stripDraftRecordIdsFromApplicants(this.applicants);
+			this.notifyApplicantsChange();
+		}
 		this.clearSessionDraftCache();
+		this.writeSessionDraftCache({
+			rlaId: null,
+			forceNewDraft: true,
+			numeroSolicitud: '',
+			facility: null,
+			datosGeneralesSolicitud: null,
+		});
 		if (typeof this.omniApplyCallResp === 'function') {
 			this.omniApplyCallResp({ rlaId: null, forceNewDraft: true });
 		}
@@ -1110,7 +1152,9 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 				}
 				this.writeSessionDraftCache({
 					rlaId: response.rlaId,
+					forceNewDraft: false,
 					numeroSolicitud: this.activeDraftNumber,
+					applicants: this.applicants,
 				});
 			}
 		} catch (error) {
@@ -1125,11 +1169,7 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 
 	@api
 	reportValidity() {
-		const valid = this.updateOmniValidity(true);
-		if (valid && !this.getEffectiveDraftRlaId()) {
-			this.persistStep1DraftToServer();
-		}
-		return valid;
+		return this.updateOmniValidity(true);
 	}
 
 	updateOmniValidity(reportErrors) {
@@ -1222,10 +1262,8 @@ export default class FscLoanApplicantManager extends NavigationMixin(OmniscriptB
 		}
 	}
 
-	debugTrace(eventName, details = {}) {
-		// TEMPORAL: diagnóstico del doble clic en Siguiente. Retirar al terminar.
-		// eslint-disable-next-line no-console
-		console.log('[APPLICANT-DEBUG]', new Date().toISOString(), eventName, JSON.stringify(details));
+	debugTrace() {
+		// Diagnóstico desactivado en producción.
 	}
 
 	notifyApplicantsChange() {

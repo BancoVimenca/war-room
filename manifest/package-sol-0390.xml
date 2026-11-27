@@ -24,6 +24,7 @@
         <name>Layout</name>
     </types>
     <types>
+        <members>fsc_EditarDocumentoAnalisis</members>
         <members>fsc_RlaAcciones</members>
         <members>fsc_loanApplicantManager</members>
         <members>fsc_loanFacilityManager</members>
