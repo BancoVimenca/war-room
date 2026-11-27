@@ -11,6 +11,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		@AuraEnabled public Decimal montoGanado { get; set; }
 		@AuraEnabled public Decimal montoPerdido { get; set; }
 		@AuraEnabled public Boolean isAdministrator { get; set; }
+		@AuraEnabled public Boolean canGenerateActasComite { get; set; }
 
 		public WorkspaceMetrics() {
 			this.misPendientesDirectos = 0;
@@ -23,6 +24,7 @@ public with sharing class FSC_CreditWorkspaceController {
 			this.montoGanado = 0.0;
 			this.montoPerdido = 0.0;
 			this.isAdministrator = false;
+			this.canGenerateActasComite = false;
 		}
 	}
 
@@ -77,6 +79,7 @@ public with sharing class FSC_CreditWorkspaceController {
 		metrics.isAdministrator = isAdmin;
 
 		String effectiveRole = (isAdmin && String.isNotBlank(simulatedRole)) ? simulatedRole : 'REAL_USER';
+		metrics.canGenerateActasComite = checkCanGenerateActasComite(currentUserId, isAdmin, effectiveRole);
 		Set<Id> targetActorIds = resolveTargetActorIds(currentUserId, effectiveRole);
 
 		// 1. Mapear excepciones de crédito activas (FSC_Excepcion__c) y vincular con solicitud principal
@@ -554,6 +557,42 @@ public with sharing class FSC_CreditWorkspaceController {
 			return true;
 		}
 		return FeatureManagement.checkPermission('ModifyAllData');
+	}
+
+	@TestVisible
+	private static Boolean checkCanGenerateActasComite(Id userId, Boolean isAdmin, String effectiveRole) {
+		if (isAdmin) {
+			if (effectiveRole == 'OFICIAL' || effectiveRole == 'FORMALIZACION' || effectiveRole == 'EXCEPCIONES') {
+				return false;
+			}
+			return true;
+		}
+
+		Set<Id> assignedPermSetIds = new Set<Id>();
+		for (PermissionSetAssignment psa : [
+			SELECT PermissionSetId
+			FROM PermissionSetAssignment
+			WHERE AssigneeId = :userId
+			AND IsActive = true
+			WITH SYSTEM_MODE
+		]) {
+			assignedPermSetIds.add(psa.PermissionSetId);
+		}
+
+		if (assignedPermSetIds.isEmpty()) {
+			return false;
+		}
+
+		Integer accessCount = [
+			SELECT COUNT()
+			FROM SetupEntityAccess
+			WHERE ParentId IN :assignedPermSetIds
+			AND SetupEntityId IN (
+				SELECT Id FROM ApexPage WHERE Name = 'FSC_ActaComitePDF'
+			)
+			WITH SYSTEM_MODE
+		];
+		return accessCount > 0;
 	}
 
 	private static Set<Id> resolveTargetActorIds(Id userId, String effectiveRole) {
