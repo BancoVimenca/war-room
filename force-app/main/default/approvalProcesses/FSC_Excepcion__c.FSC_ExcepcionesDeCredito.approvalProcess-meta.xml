@@ -12,6 +12,8 @@
         <field>FSC_Detalle__c</field>
         <field>FSC_Motivo__c</field>
         <field>FSC_Condicion__c</field>
+        <field>FSC_Observaciones_Aprobador__c</field>
+        <field>FSC_Paso_Observacion__c</field>
         <field>FSC_Estado__c</field>
     </approvalPageFields>
     <approvalStep>

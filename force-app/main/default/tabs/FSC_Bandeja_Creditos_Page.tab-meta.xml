@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<CustomTab xmlns="http://soap.sforce.com/2006/04/metadata">
+    <description>Bandeja Integral para Gestión de Solicitudes de Crédito y Excepciones</description>
+    <flexiPage>FSC_Bandeja_Creditos_Page</flexiPage>
+    <label>Bandeja de Créditos</label>
+    <motif>Custom41: Stack of Cash</motif>
+</CustomTab>

@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<Package xmlns="http://soap.sforce.com/2006/04/metadata">
+    <types>
+        <members>FSC_CreditWorkspaceController</members>
+        <members>FSC_ExcepcionApprovalService</members>
+        <members>FSC_ExcepcionSelector</members>
+        <members>FSC_ExcepcionTriggerHandler</members>
+        <members>FSC_ExcepcionTriggerHandlerTest</members>
+        <members>FSC_ExcepcionesCreditoController</members>
+        <members>FSC_ExcepcionesCreditoControllerTest</members>
+        <name>ApexClass</name>
+    </types>
+    <types>
+        <members>FSC_Excepcion__c.FSC_ExcepcionesDeCredito</members>
+        <name>ApprovalProcess</name>
+    </types>
+    <types>
+        <members>FSC_Excepcion__c.FSC_Estado__c</members>
+        <members>FSC_Excepcion__c.FSC_Observaciones_Aprobador__c</members>
+        <members>FSC_Excepcion__c.FSC_Paso_Observacion__c</members>
+        <name>CustomField</name>
+    </types>
+    <types>
+        <members>FSC_Excepcion__c-Excepción FSC Layout</members>
+        <members>FSC_Excepcion__c-Excepción Layout</members>
+        <name>Layout</name>
+    </types>
+    <types>
+        <members>fsc_RlaAcciones</members>
+        <name>LightningComponentBundle</name>
+    </types>
+    <types>
+        <members>FSC_PS_Administrador</members>
+        <members>FSC_PS_Analista_Credito</members>
+        <members>FSC_PS_Comite_Credito</members>
+        <members>FSC_PS_Oficial_Negocio</members>
+        <members>FSC_PS_Supervisor</members>
+        <name>PermissionSet</name>
+    </types>
+    <version>65.0</version>
+</Package>

@@ -60,27 +60,10 @@ public without sharing class VFS_LeadAreaResponsableService {
             return buildDefaultResponse(glosaAprobado, false);
         }
 
-        // 2. Revisar si el prospecto tiene una solicitud/tarea abierta de recaudos o información solicitada por PLA
-        List<Task> pendingPlaTasks = [
-            SELECT Id, Description, CreatedDate
-            FROM Task
-            WHERE (WhoId = :recordId OR WhatId = :recordId)
-            AND Subject LIKE 'PLA: Requerimiento%'
-            AND Status != 'Completed'
-            ORDER BY CreatedDate DESC
-            LIMIT 1
-        ];
-
-        if (!pendingPlaTasks.isEmpty()) {
-            AreaResponsableInfo info = buildDefaultResponse('Negocios', false);
-            info.messagePrefix = 'El prospecto posee requerimiento de información / evidencias solicitado por PLA (consulte la sección Actividad):';
-            info.bannerClass = 'slds-notify slds-notify_alert slds-alert_warning alert-container';
-            info.iconName = 'utility:warning';
-            info.iconVariant = 'warning';
-            return info;
-        }
-
-        // 3. Revisar si tiene un proceso de aprobación formal pendiente en curso (ProcessInstanceWorkitem)
+        // 2. REGLA RECTORA DE PROCESO DE APROBACIÓN EN CURSO (ProcessInstanceWorkitem):
+        // Si el prospecto ya ingresó y se encuentra en una cola de validación activa (FSC_Legal, FSC_PLA o Tecnología),
+        // dicha asignación formal prevalece de forma estricta sobre cualquier tarea histórica previa de requerimiento de PLA,
+        // garantizando que el banner esté 100% sincronizado con la bandeja que efectivamente tiene el expediente.
         List<ProcessInstanceWorkitem> pendingWorkitems = [
             SELECT Id,
                    ProcessInstance.ProcessDefinition.DeveloperName,
@@ -119,6 +102,27 @@ public without sharing class VFS_LeadAreaResponsableService {
                 actorName.containsIgnoreCase('Legal')) {
                 return buildDefaultResponse('Bandeja Validación Legal', false);
             }
+        }
+
+        // 3. Revisar si el prospecto tiene una solicitud/tarea abierta de recaudos o información solicitada por PLA
+        // Solo aplica si NO se encuentra en un proceso formal de aprobación asignado a otra área.
+        List<Task> pendingPlaTasks = [
+            SELECT Id, Description, CreatedDate
+            FROM Task
+            WHERE (WhoId = :recordId OR WhatId = :recordId)
+            AND Subject LIKE 'PLA: Requerimiento%'
+            AND Status != 'Completed'
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+
+        if (!pendingPlaTasks.isEmpty()) {
+            AreaResponsableInfo info = buildDefaultResponse('Negocios', false);
+            info.messagePrefix = 'El prospecto posee requerimiento de información / evidencias solicitado por PLA (consulte la sección Actividad):';
+            info.bannerClass = 'slds-notify slds-notify_alert slds-alert_warning alert-container';
+            info.iconName = 'utility:warning';
+            info.iconVariant = 'warning';
+            return info;
         }
 
         // 4. Revisar si tiene documentos con observaciones devueltos a Negocios o en revisión por Legal
@@ -210,7 +214,27 @@ public without sharing class VFS_LeadAreaResponsableService {
             return buildDefaultResponse('Aprobado PLA-Legal / Revise completitud de datos antes de convertir', true);
         }
 
-        // 2. Revisar si tiene tarea pendiente de evidencias PLA
+        // 2. Proceso formal de aprobación en curso sobre Account (ProcessInstanceWorkitem):
+        // Prevalece sobre tareas previas para sincronía directa con las bandejas operativas.
+        List<ProcessInstanceWorkitem> pendingWorkitems = [
+            SELECT Id, ProcessInstance.ProcessDefinition.DeveloperName, Actor.Name
+            FROM ProcessInstanceWorkitem
+            WHERE ProcessInstance.TargetObjectId = :accountId
+            AND ProcessInstance.Status = 'Pending'
+            ORDER BY CreatedDate DESC
+            LIMIT 1
+        ];
+
+        if (!pendingWorkitems.isEmpty()) {
+            ProcessInstanceWorkitem item = pendingWorkitems[0];
+            String actorName = item.Actor != null ? item.Actor.Name : '';
+            if (actorName.containsIgnoreCase('PLA') || actorName.containsIgnoreCase('Prevenci')) {
+                return buildDefaultResponse('Bandeja PLA / Cumplimiento', true);
+            }
+            return buildDefaultResponse('Bandeja Validación Legal', true);
+        }
+
+        // 3. Revisar si tiene tarea pendiente de evidencias PLA
         List<Task> pendingPlaTasks = [
             SELECT Id, Description, CreatedDate
             FROM Task
@@ -228,25 +252,6 @@ public without sharing class VFS_LeadAreaResponsableService {
             info.iconName = 'utility:warning';
             info.iconVariant = 'warning';
             return info;
-        }
-
-        // 3. Revisar si tiene proceso formal de aprobación en curso
-        List<ProcessInstanceWorkitem> pendingWorkitems = [
-            SELECT Id, ProcessInstance.ProcessDefinition.DeveloperName, Actor.Name
-            FROM ProcessInstanceWorkitem
-            WHERE ProcessInstance.TargetObjectId = :accountId
-            AND ProcessInstance.Status = 'Pending'
-            ORDER BY CreatedDate DESC
-            LIMIT 1
-        ];
-
-        if (!pendingWorkitems.isEmpty()) {
-            ProcessInstanceWorkitem item = pendingWorkitems[0];
-            String actorName = item.Actor != null ? item.Actor.Name : '';
-            if (actorName.containsIgnoreCase('PLA') || actorName.containsIgnoreCase('Prevenci')) {
-                return buildDefaultResponse('Bandeja PLA / Cumplimiento', true);
-            }
-            return buildDefaultResponse('Bandeja Validación Legal', true);
         }
 
         // 4. Revisar si tiene DocumentChecklistItems devueltos o en revisión legal
