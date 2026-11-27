@@ -3892,9 +3892,20 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 		}
 	}
 
-	openModalSubsanarExcepcion() {
-		this.subsanacionExcepcionInput = this.excepcionContext.motivo || '';
-		this.showModalSubsanarExcepcion = true;
+	async openModalSubsanarExcepcion() {
+		this.loading = true;
+		try {
+			await this.refreshAll();
+			this.opcionesExcepcion = (await getOpcionesExcepcion()) || [];
+			this.tipoExcepcionSeleccionado = this.excepcionContext.tipo || '';
+			this.detalleExcepcionSeleccionado = this.excepcionContext.detalle || '';
+			this.subsanacionExcepcionInput = this.excepcionContext.motivo || '';
+			this.showModalSubsanarExcepcion = true;
+		} catch (error) {
+			this.showToast('Error', this.getErrorMessage(error, 'No se pudo cargar el catálogo de excepciones.'), 'error');
+		} finally {
+			this.loading = false;
+		}
 	}
 
 	closeModalSubsanarExcepcion() {
@@ -3906,9 +3917,11 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 	}
 
 	async handleSubsanarYReenviarExcepcion() {
+		const nuevoTipo = (this.tipoExcepcionSeleccionado || '').trim();
+		const nuevoDetalle = (this.detalleExcepcionSeleccionado || '').trim();
 		const nuevaDescripcion = (this.subsanacionExcepcionInput || '').trim();
-		if (!nuevaDescripcion) {
-			this.showToast('Error', 'La descripción subsanada de la excepción es obligatoria.', 'error');
+		if (!nuevoTipo || !nuevoDetalle || !nuevaDescripcion) {
+			this.showToast('Error', 'Tipo, detalle y motivo de la excepción son obligatorios.', 'error');
 			return;
 		}
 
@@ -3917,6 +3930,8 @@ export default class Fsc_RlaAcciones extends NavigationMixin(LightningElement) {
 		try {
 			await subsanarYReenviarExcepcion({
 				excepcionId: this.excepcionContext.excepcionId,
+				nuevoTipo,
+				nuevoDetalle,
 				nuevaDescripcion,
 			});
 			this.showToast('Excepción reenviada', 'La excepción subsanada fue enviada nuevamente a aprobación.', 'success');

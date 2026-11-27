@@ -359,20 +359,33 @@ private class FSC_ExcepcionesCreditoControllerTest {
 		Assert.areEqual(true, ctxObservada.get('puedeSubsanarObservacion'), 'El oficial debe poder subsanar la excepción.');
 		Assert.areEqual(false, ctxObservada.get('hasActiveApproval'), 'No debe tener workitem activo mientras está observada.');
 
+		List<FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion> allOptions = FSC_ExcepcionesCreditoController.getOpcionesExcepcion();
+		FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion updatedOption = option;
+		for (FSC_ExcepcionesCreditoController.FSC_OpcionExcepcion candidate : allOptions) {
+			if (candidate.detalle != option.detalle) {
+				updatedOption = candidate;
+				break;
+			}
+		}
+
 		FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(
 			excepcionId,
+			updatedOption.tipo,
+			updatedOption.detalle,
 			'  Posee 5 moras a 30 días en Scotiabank ya solventadas con carta saldo  '
 		);
 		Test.stopTest();
 
 		FSC_Excepcion__c reenviada = [
-			SELECT FSC_Estado__c, FSC_Motivo__c, FSC_Observaciones_Aprobador__c
+			SELECT FSC_Estado__c, FSC_Tipo__c, FSC_Detalle__c, FSC_Motivo__c, FSC_Observaciones_Aprobador__c
 			FROM FSC_Excepcion__c
 			WHERE Id = :excepcionId
 		];
 		Map<String, Object> ctxReenviada = FSC_ExcepcionesCreditoController.getContextoExcepcion(solicitud.Id);
 		Map<String, Object> ctxDirectoExcepcion = FSC_ExcepcionesCreditoController.getContextoPorExcepcion(excepcionId);
 		Assert.areEqual('Pendiente', reenviada.FSC_Estado__c, 'Tras subsanar debe regresar a estado Pendiente.');
+		Assert.areEqual(updatedOption.tipo, reenviada.FSC_Tipo__c, 'Debe actualizar el tipo de la excepción subsanada.');
+		Assert.areEqual(updatedOption.detalle, reenviada.FSC_Detalle__c, 'Debe actualizar el detalle de la excepción subsanada.');
 		Assert.areEqual(
 			'Posee 5 moras a 30 días en Scotiabank ya solventadas con carta saldo',
 			reenviada.FSC_Motivo__c,
@@ -406,17 +419,30 @@ private class FSC_ExcepcionesCreditoControllerTest {
 		}
 
 		try {
-			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(excepcionId, 'Intento sobre pendiente');
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(excepcionId, null, null, 'Intento sobre pendiente');
 			Assert.fail('No debe permitir subsanar una excepción que no está en estado Observada.');
 		} catch (AuraHandledException exInvalidState) {
 			Assert.isNotNull(exInvalidState);
 		}
 
 		try {
-			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(excepcionId, ' ');
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(excepcionId, null, null, ' ');
 			Assert.fail('Debe exigir descripción al subsanar.');
 		} catch (AuraHandledException exEmptyDesc) {
 			Assert.isNotNull(exEmptyDesc);
+		}
+
+		FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion(excepcionId, 'Favor corregir detalle');
+		try {
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(
+				excepcionId,
+				option.tipo,
+				'Detalle Inexistente No Configurado',
+				'Motivo subsanado válido'
+			);
+			Assert.fail('Debe rechazar un detalle no configurado en Custom Metadata.');
+		} catch (AuraHandledException exInvalidConfig) {
+			Assert.isNotNull(exInvalidConfig);
 		}
 		Test.stopTest();
 	}
@@ -513,7 +539,7 @@ private class FSC_ExcepcionesCreditoControllerTest {
 		forceAuthorization();
 		FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion(exc.Id, 'Aclarar motivo');
 		System.runAs(regularUser) {
-			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(exc.Id, 'Motivo aclarado por oficial');
+			FSC_ExcepcionesCreditoController.subsanarYReenviarExcepcion(exc.Id, null, null, 'Motivo aclarado por oficial');
 		}
 
 		ProcessInstanceWorkitem wi = [

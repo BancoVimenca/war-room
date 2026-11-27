@@ -5,6 +5,7 @@ import { notifyRecordUpdateAvailable } from 'lightning/uiRecordApi';
 import { RefreshEvent } from 'lightning/refresh';
 
 import getContextoPorExcepcion from '@salesforce/apex/FSC_ExcepcionesCreditoController.getContextoPorExcepcion';
+import getOpcionesExcepcion from '@salesforce/apex/FSC_ExcepcionesCreditoController.getOpcionesExcepcion';
 import aprobarExcepcion from '@salesforce/apex/FSC_ExcepcionesCreditoController.aprobarExcepcion';
 import aprobarExcepcionConCondicion from '@salesforce/apex/FSC_ExcepcionesCreditoController.aprobarExcepcionConCondicion';
 import devolverExcepcionConObservacion from '@salesforce/apex/FSC_ExcepcionesCreditoController.devolverExcepcionConObservacion';
@@ -25,6 +26,9 @@ export default class Fsc_ExcepcionAcciones extends LightningElement {
 	@track observacionesInput = '';
 	@track motivoRechazoInput = '';
 	@track subsanacionInput = '';
+	@track subsanarTipoInput = '';
+	@track subsanarDetalleInput = '';
+	@track opcionesCatalogo = [];
 
 	wiredContextResult;
 
@@ -93,6 +97,22 @@ export default class Fsc_ExcepcionAcciones extends LightningElement {
 
 	get showRespuestaCondicion() {
 		return this.ctx.puedeResponderCondicion === true;
+	}
+
+	get tipoOptions() {
+		const tipos = [...new Set((this.opcionesCatalogo || []).map((op) => op.tipo).filter(Boolean))];
+		return tipos.sort().map((tipo) => ({ label: tipo, value: tipo }));
+	}
+
+	get detalleOptions() {
+		return (this.opcionesCatalogo || [])
+			.filter((op) => op.tipo === this.subsanarTipoInput)
+			.map((op) => ({ label: op.detalle, value: op.detalle }))
+			.sort((a, b) => a.label.localeCompare(b.label, 'es'));
+	}
+
+	get isSubsanarDetalleDisabled() {
+		return !this.subsanarTipoInput;
 	}
 
 	async handleAprobar() {
@@ -208,13 +228,33 @@ export default class Fsc_ExcepcionAcciones extends LightningElement {
 		}
 	}
 
-	openModalSubsanar() {
-		this.subsanacionInput = this.ctx.motivo || '';
-		this.showModalSubsanar = true;
+	async openModalSubsanar() {
+		this.loading = true;
+		try {
+			await this.refreshData();
+			this.opcionesCatalogo = (await getOpcionesExcepcion()) || [];
+			this.subsanarTipoInput = this.ctx.tipo || '';
+			this.subsanarDetalleInput = this.ctx.detalle || '';
+			this.subsanacionInput = this.ctx.motivo || '';
+			this.showModalSubsanar = true;
+		} catch (error) {
+			this.showToast('Error', this.extractError(error, 'No se pudo cargar el catálogo de excepciones.'), 'error');
+		} finally {
+			this.loading = false;
+		}
 	}
 
 	closeModalSubsanar() {
 		this.showModalSubsanar = false;
+	}
+
+	handleSubsanarTipoChange(event) {
+		this.subsanarTipoInput = event.detail.value;
+		this.subsanarDetalleInput = '';
+	}
+
+	handleSubsanarDetalleChange(event) {
+		this.subsanarDetalleInput = event.detail.value;
 	}
 
 	handleSubsanacionChange(event) {
@@ -222,15 +262,22 @@ export default class Fsc_ExcepcionAcciones extends LightningElement {
 	}
 
 	async handleConfirmarSubsanar() {
+		const nuevoTipo = (this.subsanarTipoInput || '').trim();
+		const nuevoDetalle = (this.subsanarDetalleInput || '').trim();
 		const nuevaDescripcion = (this.subsanacionInput || '').trim();
-		if (!nuevaDescripcion) {
-			this.showToast('Error', 'La descripción subsanada es obligatoria.', 'error');
+		if (!nuevoTipo || !nuevoDetalle || !nuevaDescripcion) {
+			this.showToast('Error', 'Tipo, detalle y motivo de la excepción son obligatorios.', 'error');
 			return;
 		}
 		this.showModalSubsanar = false;
 		this.loading = true;
 		try {
-			await subsanarYReenviarExcepcion({ excepcionId: this.recordId, nuevaDescripcion });
+			await subsanarYReenviarExcepcion({
+				excepcionId: this.recordId,
+				nuevoTipo,
+				nuevoDetalle,
+				nuevaDescripcion
+			});
 			this.showToast('Excepción reenviada', 'La excepción subsanada fue enviada nuevamente a aprobación.', 'success');
 			await this.refreshData();
 		} catch (error) {
