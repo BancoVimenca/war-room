@@ -131,6 +131,7 @@ public with sharing class FSC_RLATriggerHandler {
 	}
 
 	public static void afterUpdate(List<ResidentialLoanApplication> newRLA, Map<Id, ResidentialLoanApplication> oldRLA) {
+		FSC_LoanDraftPersistenceService.reconcileSubmittedDraftChildren(newRLA, oldRLA);
 		FSC_CapturaOperacionesService.compartirSolicitudes(newRLA, oldRLA);
 		FSC_FormalizacionGarantiasService.compartir(newRLA, oldRLA);
 		FSC_FormalizacionNotificaciones.programar(newRLA, oldRLA);
