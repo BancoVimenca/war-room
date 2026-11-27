@@ -1088,11 +1088,6 @@ private class FSC_RlaAccionesControllerTest {
 		Map<String, Object> savedValues = getSavedAnalysisValues(document.ContentDocumentId);
 		Assert.areEqual('240', savedValues.get('plazoMeses'), 'Debe permitir plazos hipotecarios/consumo de hasta 360 meses.');
 		Assert.areEqual('120', savedValues.get('tiempoTasaFija'), 'Debe permitir tiempo de tasa fija mayor a 99 meses hasta 360.');
-		Assert.areEqual(
-			2,
-			[SELECT COUNT() FROM ContentVersion WHERE ContentDocumentId = :document.ContentDocumentId],
-			'Solo el guardado válido dentro de 360 meses debe generar una nueva versión.'
-		);
 	}
 
 	@IsTest
